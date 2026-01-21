@@ -13,3 +13,5 @@
 19/01/2026
 
 - nouveau protocole de communication : udp, probablement plus adapté pour du streaming audio continu
+- recherches rapides sur l'alimentation des cartes par batterie et panneau solaire. Not straightforward. Demander à Nemo demain.
+- Il faut discuter du format des données (IN) et (OUT)
