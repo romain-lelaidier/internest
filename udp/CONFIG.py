@@ -1,8 +1,8 @@
 FREQ_E = 48000
 SIGNAL_MAX_VALUE = 1
 
-CHUNK_SIZE = 4096
-CHUNK_PER_FILE = 25
+CHUNK_SIZE = 2048  # bits
+CHUNK_PER_FILE = 50
 
 # Network parameters
 localPort = 8888

@@ -19,14 +19,8 @@ def sin_sig(start_date):
         if encoded_value == - 2 ** (BITS_PER_POINT - 1):
             encoded_value += 1   
         encoded_value = encoded_value.to_bytes(BITS_PER_POINT // 8, "little", signed=True)
-        if real_value < -0.9:
-            print(real_value)
-            print(encoded_value)
-            print(int.from_bytes(encoded_value, "little", signed=True))
-            return
         buf += encoded_value
         time.sleep(1 / FREQ_E)
-    print(len(buf), number_of_points)
     return buf
 
 
@@ -47,6 +41,7 @@ def send_signal(server_ip, server_port):
             data = sin_sig(start_date)
             signal = date + data
             sock.sendto(signal, (server_ip, server_port))
+            print(f"Chunk sent of size {len(signal)}o at date = {start_date}")
     except KeyboardInterrupt:
         print("Stopping audio stream...")
     finally:

@@ -28,10 +28,11 @@ def date_data_tab(file_path, verbose=False):
             for i in range(CHUNK_PER_FILE)
         ]
     data = [
-        [data[i][j:j+1] for j in range(len(data[i]))]  # data[i][j] converts the signed binary to int as if it were unsigned
+        [
+            data[i][j : j + 1] for j in range(len(data[i]))
+        ]  # data[i][j] converts the signed binary to int as if it were unsigned
         for i in range(len(data))
     ]
-    print(data[0][23])
     if verbose:
         verbose_data_bin_tab(file, dates, data)
 
@@ -54,16 +55,15 @@ def point_decryption(encrypted_point):
 
 def to_human_readable(dates, data, verbose=False):
     dates = [time_decryption(date) for date in dates]
-    print("ksqujglqkerjng", data[0, 23])
     data = [
         [point_decryption(data[i, j]) for j in range(len(data[i]))]
         for i in range(len(data))
-    ]  # to encrypted int
+    ]
     data = np.array(data)
 
     if verbose:
         print("len(dates) : ", len(dates), "; dates[:5] : ", dates[:5])
-        print("len(data) : ", len(data), "; data[0, :5] : ", data[0, :40])
+        print("len(data) : ", len(data), "; data[0, :5] : ", data[0, :5])
 
     return dates, data
 
@@ -78,7 +78,7 @@ def plot_series(date, series):
 
 
 if __name__ == "__main__":
-    FILE_PATH = "C:/Users/colin/COLIN/Mines/TI_IDS/Internest/internest/udp/bin_f/2026-01-26_12-09-53.513546.bin"
+    FILE_PATH = "C:/Users/colin/COLIN/Mines/TI_IDS/Internest/internest/udp/bin_f/2026-01-26_14-41-55.416672.bin"
     bin_dates, bin_data = date_data_tab(FILE_PATH, verbose=True)
     dates, data = to_human_readable(bin_dates, bin_data, verbose=True)
 
