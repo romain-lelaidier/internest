@@ -22,3 +22,7 @@ Le deuxième problème c'est que cette méthode peut créer des hallucinations s
 
 <img width="1422" height="1485" alt="trajectories_confidence" src="https://github.com/user-attachments/assets/bc35429b-6cab-4c8b-b79b-661bd8d4c675" />
 
+<img width="1490" height="1483" alt="trajectories_confidence_2d" src="https://github.com/user-attachments/assets/a842e754-8822-4dc9-8e3e-d285ef7ce011" />
+
+
+
