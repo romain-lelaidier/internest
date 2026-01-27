@@ -3,7 +3,7 @@
 L'idée est d'exploiter les spectrogrammes des fichiers receuillis sur chaque micro. Ensuite on applique un modèle entrainé de type YOLO pour repérer les motifs spectraux.
 Ensuite avec des algos de clustering et de lissage, on peut faire de la GCC et remonter aux trajectoires.
 
-[STFT_Expl.pdf](https://github.com/user-attachments/files/24886733/STFT_Expl.pdf)
+<img width="8356" height="3792" alt="STFT_Expl" src="https://github.com/user-attachments/assets/9da1d353-aad5-417e-9dc9-5ebaf34b5d54" />
 
 <img width="1440" height="700" alt="Figure_1" src="https://github.com/user-attachments/assets/bbad8ce5-926b-48df-955f-9990dd6771bf" />
 
