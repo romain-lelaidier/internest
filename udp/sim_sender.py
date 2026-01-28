@@ -8,6 +8,7 @@ def sin_sig(start_date):
     freq = 440
     buf = b""
     number_of_points = (CHUNK_SIZE - BYTES_FOR_DATE * 8) // BITS_PER_POINT
+    print(number_of_points, (CHUNK_SIZE - BYTES_FOR_DATE * 8) / BITS_PER_POINT)
     for i in range(number_of_points):
         t = i / FREQ_E
         real_value = math.sin(2 * math.pi * freq * (t + start_date))
@@ -36,12 +37,15 @@ def encoded_byte_date():
 def send_signal(server_ip, server_port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
+        i = 0
         while True:
             date, start_date = encoded_byte_date()
             data = sin_sig(start_date)
             signal = date + data
             sock.sendto(signal, (server_ip, server_port))
-            print(f"Chunk sent of size {len(signal)}o at date = {start_date}")
+            if i % 25 == 0:
+                print(f"Chunk sent of size {len(signal)}o at date = {start_date}")
+            i += 1
     except KeyboardInterrupt:
         print("Stopping audio stream...")
     finally:
