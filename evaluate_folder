@@ -1,0 +1,348 @@
+import os
+import json
+import argparse
+import numpy as np
+import pandas as pd
+import librosa
+
+from detector_bandenergy import band_energy_series, detect_events_from_energy  # ou detect_events_zscore si tu l'utilises
+from count_estimator import estimate_num_birds
+from utils_audio import clamp_interval, slice_audio, write_wav
+
+import subprocess
+import sys
+
+
+def load_audio_any(path: str, target_sr: int = 48000, mono: bool = True):
+    """Lecture robuste (wav/mp3/flac/ogg) via librosa."""
+    y, sr = librosa.load(path, sr=target_sr, mono=mono)
+    y = y.astype(np.float32)
+    # DC + normalisation robuste
+    y = y - float(np.mean(y))
+    scale = np.percentile(np.abs(y), 99.9) + 1e-9
+    y = np.clip(y / scale, -1.0, 1.0)
+    return y, target_sr
+
+
+def make_event_segments(events, total_s, segment_len_s=3.0, pad_s=0.5):
+    segs = []
+    target_len = segment_len_s + 2 * pad_s
+    for (s, e) in events:
+        center = 0.5 * (s + e)
+        start = center - 0.5 * segment_len_s - pad_s
+        end = center + 0.5 * segment_len_s + pad_s
+        start, end = clamp_interval(start, end, total_s)
+
+        if (end - start) < target_len:
+            extra = target_len - (end - start)
+            start = max(0.0, start - extra / 2)
+            end = min(total_s, end + extra / 2)
+
+        segs.append((start, end))
+    return segs
+
+
+def run_birdnet_on_folder_segments(input_folder: str, output_folder: str,
+                                  min_conf: float, top_n: int, lat: float, lon: float):
+    """Lance BirdNET-Analyzer sur un dossier de segments et concatène tous les *.BirdNET.results.csv."""
+    os.makedirs(output_folder, exist_ok=True)
+
+    cmd = [
+        sys.executable, "-m", "birdnet_analyzer.analyze",
+        input_folder,
+        "--output", output_folder,
+        "--rtype", "csv",
+        "--min_conf", str(min_conf),
+        "--top_n", str(top_n),
+        "--lat", str(lat),
+        "--lon", str(lon),
+    ]
+    subprocess.run(cmd, check=True)
+
+    csv_files = [
+        os.path.join(output_folder, fn)
+        for fn in os.listdir(output_folder)
+        if fn.lower().endswith(".birdnet.results.csv")
+    ]
+
+    if not csv_files:
+        return pd.DataFrame(), []
+
+    dfs = []
+    for p in csv_files:
+        try:
+            df = pd.read_csv(p)
+            df["__results_csv__"] = os.path.basename(p)
+            dfs.append(df)
+        except Exception:
+            continue
+
+    if not dfs:
+        return pd.DataFrame(), csv_files
+
+    return pd.concat(dfs, ignore_index=True), csv_files
+
+
+def infer_file_column(df: pd.DataFrame):
+    """Trouve la colonne de chemin fichier dans les résultats BirdNET."""
+    for cand in ["File", "file", "Filename", "filename", "Path", "path", "Audio", "audio", "Audio file"]:
+        if cand in df.columns:
+            return cand
+    for c in df.columns:
+        if df[c].astype(str).str.contains(".wav", regex=False).any():
+            return c
+    return None
+
+
+def infer_species_column(df: pd.DataFrame):
+    """Trouve la colonne d'espèce (scientifique / commun)."""
+    for cand in ["Scientific name", "Common name", "Species", "species"]:
+        if cand in df.columns:
+            return cand
+    return None
+
+
+def infer_conf_column(df: pd.DataFrame):
+    for cand in ["Confidence", "confidence", "Score", "score", "Probability", "probability"]:
+        if cand in df.columns:
+            return cand
+    return None
+
+
+def analyze_one_file(audio_path: str, cfg: dict):
+    """Applique ta pipeline sur 1 fichier et renvoie une prédiction agrégée."""
+    sr = int(cfg["sample_rate"])
+    y, sr = load_audio_any(audio_path, target_sr=sr, mono=True)
+    total_s = len(y) / sr
+
+    # Détecteur léger
+    times, energy = band_energy_series(
+        y, sr,
+        win_s=float(cfg["scan_window_s"]),
+        hop_s=float(cfg["scan_hop_s"]),
+        f_low=float(cfg["band_low_hz"]),
+        f_high=float(cfg["band_high_hz"]),
+    )
+
+    events = detect_events_from_energy(
+        times, energy,
+        threshold_quantile=float(cfg["energy_threshold_quantile"]),
+        min_event_s=float(cfg["min_event_s"]),
+        merge_gap_s=float(cfg["merge_gap_s"]),
+    )
+
+    # Segments BirdNET
+    segs = make_event_segments(
+        events,
+        total_s=total_s,
+        segment_len_s=float(cfg["birdnet_segment_s"]),
+        pad_s=float(cfg["context_pad_s"]),
+    )
+
+    # Si aucun segment détecté, on retourne "pas d'oiseau"
+    if len(segs) == 0:
+        return {
+            "pred_bird_present": 0,
+            "pred_species_top1": None,
+            "pred_species_topk": [],
+            "pred_count": 0,
+            "num_segments": 0,
+            "birdnet_rows": 0
+        }
+
+    # Écrire segments wav dans un workdir dédié à ce fichier
+    work_root = cfg["work_dir"]
+    base = os.path.splitext(os.path.basename(audio_path))[0]
+    seg_dir = os.path.join(work_root, "eval_segments", base)
+    out_dir = os.path.join(work_root, "eval_birdnet_out", base)
+    os.makedirs(seg_dir, exist_ok=True)
+    os.makedirs(out_dir, exist_ok=True)
+
+    manifest = []
+    for idx, (s, e) in enumerate(segs):
+        seg = slice_audio(y, sr, s, e)
+        n_est, _dbg = estimate_num_birds(seg, sr, f_low=int(cfg["band_low_hz"]), f_high=int(cfg["band_high_hz"]))
+
+        seg_fn = f"seg_{idx:06d}_{s:.2f}_{e:.2f}.wav"
+        seg_path = os.path.join(seg_dir, seg_fn)
+        write_wav(seg_path, seg, sr)
+
+        manifest.append({
+            "segment_file": seg_fn,
+            "start_s": float(s),
+            "end_s": float(e),
+            "n_birds_est": int(n_est),
+        })
+
+    man_df = pd.DataFrame(manifest)
+
+    # BirdNET sur tous les segments
+    df_bird, _csvs = run_birdnet_on_folder_segments(
+        input_folder=seg_dir,
+        output_folder=out_dir,
+        min_conf=float(cfg["min_conf"]),
+        top_n=int(cfg["top_n"]),
+        lat=float(cfg["lat"]),
+        lon=float(cfg["lon"]),
+    )
+
+    if df_bird.empty:
+        # segments détectés mais BirdNET n’a rien gardé au-dessus du seuil
+        pred_count = int(max(man_df["n_birds_est"].max(), 1))
+        return {
+            "pred_bird_present": 0,
+            "pred_species_top1": None,
+            "pred_species_topk": [],
+            "pred_count": pred_count,
+            "num_segments": len(segs),
+            "birdnet_rows": 0
+        }
+
+    file_col = infer_file_column(df_bird)
+    sp_col = infer_species_column(df_bird)
+    conf_col = infer_conf_column(df_bird)
+
+    if file_col is None or sp_col is None:
+        raise RuntimeError(f"Colonnes BirdNET inattendues: {df_bird.columns.tolist()}")
+
+    df_bird["segment_file"] = df_bird[file_col].astype(str).apply(lambda p: os.path.basename(p))
+    merged = df_bird.merge(man_df, on="segment_file", how="left")
+
+    # Agrégation :
+    # - bird_present = au moins une ligne BirdNET
+    # - espèce top1 = max confidence globale
+    # - topk = k espèces uniques par score décroissant
+    # - count = max(n_birds_est) sur les segments où BirdNET a détecté quelque chose
+    pred_bird_present = 1
+
+    if conf_col and conf_col in merged.columns:
+        merged["_conf"] = pd.to_numeric(merged[conf_col], errors="coerce").fillna(0.0)
+        best = merged.sort_values("_conf", ascending=False).iloc[0]
+        pred_species_top1 = str(best[sp_col])
+        topk_species = (
+            merged.sort_values("_conf", ascending=False)[sp_col]
+            .astype(str).dropna().drop_duplicates().head(int(cfg["top_n"])).tolist()
+        )
+    else:
+        pred_species_top1 = str(merged.iloc[0][sp_col])
+        topk_species = merged[sp_col].astype(str).dropna().drop_duplicates().head(int(cfg["top_n"])).tolist()
+
+    if "n_birds_est" in merged.columns and merged["n_birds_est"].notna().any():
+        pred_count = int(max(1, merged["n_birds_est"].max()))
+    else:
+        pred_count = 1
+
+    return {
+        "pred_bird_present": pred_bird_present,
+        "pred_species_top1": pred_species_top1,
+        "pred_species_topk": topk_species,
+        "pred_count": pred_count,
+        "num_segments": len(segs),
+        "birdnet_rows": int(len(df_bird))
+    }
+
+
+def normalize_species(s):
+    if s is None:
+        return None
+    s = str(s).strip()
+    return s if s != "" else None
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--audio_dir", required=True, help="Dossier contenant les audios à tester")
+    ap.add_argument("--labels", required=True, help="CSV labels (file,bird_present,species,count)")
+    ap.add_argument("--config", required=True, help="config.yaml")
+    ap.add_argument("--out_csv", default="eval_results.csv")
+    args = ap.parse_args()
+
+    import yaml
+    with open(args.config, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+
+    labels = pd.read_csv(args.labels)
+    labels["file"] = labels["file"].astype(str)
+    if "bird_present" not in labels.columns:
+        raise ValueError("labels.csv doit contenir une colonne 'bird_present'")
+    if "count" not in labels.columns:
+        labels["count"] = 0
+    if "species" not in labels.columns:
+        labels["species"] = ""
+
+    # index labels par filename
+    label_map = {row["file"]: row for _, row in labels.iterrows()}
+
+    rows = []
+    audio_files = [
+        fn for fn in os.listdir(args.audio_dir)
+        if fn.lower().endswith((".wav", ".mp3", ".flac", ".ogg", ".m4a"))
+    ]
+    audio_files.sort()
+
+    for fn in audio_files:
+        if fn not in label_map:
+            continue  # ignore fichiers non annotés
+        full_path = os.path.join(args.audio_dir, fn)
+
+        pred = analyze_one_file(full_path, cfg)
+        truth = label_map[fn]
+
+        true_present = int(truth["bird_present"])
+        true_count = int(truth["count"])
+        true_species = normalize_species(truth.get("species", ""))
+
+        pred_present = int(pred["pred_bird_present"])
+        pred_count = int(pred["pred_count"])
+        pred_top1 = normalize_species(pred["pred_species_top1"])
+        pred_topk = pred["pred_species_topk"]
+
+        species_top1_ok = (true_species is None) or (pred_top1 == true_species)
+        species_topk_ok = (true_species is None) or (true_species in pred_topk)
+
+        rows.append({
+            "file": fn,
+            "true_bird_present": true_present,
+            "pred_bird_present": pred_present,
+            "bird_present_ok": int(true_present == pred_present),
+
+            "true_species": true_species,
+            "pred_species_top1": pred_top1,
+            "species_top1_ok": int(species_top1_ok),
+            "species_topk_ok": int(species_topk_ok),
+
+            "true_count": true_count,
+            "pred_count": pred_count,
+            "count_abs_error": abs(true_count - pred_count),
+
+            "num_segments": pred["num_segments"],
+            "birdnet_rows": pred["birdnet_rows"],
+            "pred_topk_list": json.dumps(pred_topk, ensure_ascii=False),
+        })
+
+    res = pd.DataFrame(rows)
+    res.to_csv(args.out_csv, index=False)
+    print("Wrote:", args.out_csv)
+
+    if len(res) == 0:
+        print("Aucune ligne évaluée (fichiers non annotés ?).")
+        return
+
+    # Résumés
+    bird_acc = res["bird_present_ok"].mean()
+    # Espèce: on calcule seulement quand true_species est renseignée
+    has_species = res["true_species"].notna() & (res["true_species"].astype(str) != "")
+    top1_acc = res.loc[has_species, "species_top1_ok"].mean() if has_species.any() else np.nan
+    topk_acc = res.loc[has_species, "species_topk_ok"].mean() if has_species.any() else np.nan
+    mae_count = res["count_abs_error"].mean()
+
+    print(f"Files évalués: {len(res)}")
+    print(f"Bird/no-bird accuracy: {bird_acc:.3f}")
+    if has_species.any():
+        print(f"Species Top-1 accuracy (sur fichiers avec espèce): {top1_acc:.3f}")
+        print(f"Species Top-K accuracy (K=top_n) : {topk_acc:.3f}")
+    print(f"Count MAE: {mae_count:.3f}")
+
+
+if __name__ == "__main__":
+    main()

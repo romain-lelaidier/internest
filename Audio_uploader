@@ -1,0 +1,19 @@
+import librosa
+import numpy as np
+
+def load_mp3_or_audio(path, target_sr=48000, mono=True):
+    y, sr = librosa.load(
+        path,
+        sr=target_sr,   # resample automatiquement
+        mono=mono       # mix en mono si True
+    )
+    y = y.astype(np.float32)
+
+    # enlever offset DC
+    y = y - np.mean(y)
+
+    # normalisation robuste
+    scale = np.percentile(np.abs(y), 99.9) + 1e-9
+    y = np.clip(y / scale, -1.0, 1.0)
+
+    return y, target_sr

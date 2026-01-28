@@ -1,0 +1,29 @@
+# Audio
+sample_rate: 48000
+
+# Détection légère (fenêtres courtes)
+scan_window_s: 0.046     # ~2048 / 48000
+scan_hop_s: 0.023        # ~50% overlap
+
+
+energy_threshold_quantile: 0.80   # au lieu de 0.92 (beaucoup moins strict)
+min_event_s: 0.2                  # au lieu de 0.6
+merge_gap_s: 0.6                  
+
+# Bande de fréquences pour la détection
+band_low_hz: 800                 
+band_high_hz: 6000
+
+# Segments envoyés à BirdNET
+birdnet_segment_s: 3.0              # BirdNET aime 3s
+context_pad_s: 0.5                  # marge autour de l'événement avant extraction
+
+# BirdNET
+min_conf: 0.25
+top_n: 5
+lat: 48.8566
+lon: 2.3522
+
+# I/O
+work_dir: "./work"
+output_dir: "./out"
