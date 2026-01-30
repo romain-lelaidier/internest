@@ -1,89 +1,75 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from CONFIG import *
+import os
+from pathlib import Path
+import time
+import sounddevice as sd
 
 
-def verbose_data_bin_tab(file, dates, data):
-    print("len(binary_file) = ", len(file)), print()
-    print("Information on dates : ")
-    print("dates[0] = ", dates[0])
-    print("len(dates) = ", len(dates))
-    print("len(dates[0]) = ", len(dates[0])), print()
-    print("Information on data : ")
-    print("data[0][:8] = ", data[0][:8])
-    print("len(data) = ", len(data))
-    print("len(data[0]) = ", len(data[0]))
-    print([len(data[i]) for i in range(len(data))])
+class ReadBin:
+    def __init__(self):
+        self.current_time = time.time()
 
+    def date_data_tab(self, file_path):
+        with open(file_path, "rb") as fb:
+            file = fb.read()
+            data = [
+                file[BITS_PER_POINT // 8 * i : BITS_PER_POINT // 8 * (i + 1)]
+                for i in range(len(file) // (BITS_PER_POINT // 8))
+            ]
 
-def date_data_tab(file_path, verbose=False):
-    with open(file_path, "rb") as fb:
-        file = fb.read()
-        dates = [
-            file[CHUNK_SIZE // 8 * i : CHUNK_SIZE // 8 * i + BYTES_FOR_DATE]
-            for i in range(CHUNK_PER_FILE)
-        ]
-        data = [
-            file[CHUNK_SIZE // 8 * i + BYTES_FOR_DATE : CHUNK_SIZE // 8 * (i + 1)]
-            for i in range(CHUNK_PER_FILE)
-        ]
-    data = [
-        [
-            data[i][j * BITS_PER_POINT // 8 : (j+1) * BITS_PER_POINT // 8] for j in range(len(data[i]) // (BITS_PER_POINT // 8))
-        ]  # data[i][j] converts the signed binary to int as if it were unsigned
-        for i in range(len(data))
-    ]
-    if verbose:
-        verbose_data_bin_tab(file, dates, data)
+        return data
 
-    return dates, np.array(data)
+    def point_decryption(self, encrypted_point):
+        int_point = int.from_bytes(encrypted_point, "little", signed=True)
+        max_int = 2**BITS_PER_POINT
+        return int_point / max_int * SIGNAL_MAX_VALUE
 
+    def to_human_readable(self, data):
+        data = [self.point_decryption(data[i]) for i in range(len(data))]
+        return data
 
-def time_decryption(encrypted_time):
-    time_int = int.from_bytes(encrypted_time, "little")
-    max_value = 3600
-    max_int = 2 ** (8 * BYTES_FOR_DATE)
-    hour = time_int * max_value / max_int  # seconds of the current hour
-    return hour
+    def plot_series(self, series, time_series=None):
+        if time_series is None:
+            time_series = np.linspace(0, len(series) / FREQ_E * 1000, len(series))
+        plt.scatter(time_series, series)
+        plt.xlabel("time (ms)")
+        plt.ylabel("Signal")
+        plt.title(f"decrypted signal. Start time : {time_series[0]}")
+        plt.show()
 
+    def hour_time(self, epoch_time):
+        """Returns time in seconds since beginning of hour (for epoch_time)"""
+        return epoch_time - (self.current_time - self.current_time % 3600)
 
-def point_decryption(encrypted_point):
-    int_point = int.from_bytes(encrypted_point, "little", signed=True)
-    max_int = 2**BITS_PER_POINT
-    return int_point / max_int * SIGNAL_MAX_VALUE
+    def concat_data(self, file_path_list):
+        times = []
+        conc_data = []
+        for path in file_path_list:
+            bin_data = self.date_data_tab(path)
+            data = self.to_human_readable(bin_data)
+            conc_data += data
+            start_time = float(path.name[:-4]) / 1e6  # convert in seconds
+            start_time = round(self.hour_time(start_time) * 1e3)  # converts in ms
+            time_series = [start_time + 1000 * i / FREQ_E for i in range(len(data))]
+            times += time_series
+        return times, conc_data
 
-
-def to_human_readable(dates, data, verbose=False):
-    dates = [time_decryption(date) for date in dates]
-    data = [
-        [point_decryption(data[i, j]) for j in range(len(data[i]))]
-        for i in range(len(data))
-    ]
-    data = np.array(data)
-
-    if verbose:
-        print("len(dates) : ", len(dates), "; dates[:5] : ", dates[:5])
-        print("len(data) : ", len(data), "; data[0, :5] : ", data[0, :5])
-
-    return dates, data
-
-
-def plot_series(date, series):
-    time_series = np.linspace(0, len(series) / FREQ_E * 1000, len(series))
-    plt.scatter(time_series, series)
-    plt.xlabel("time (ms)")
-    plt.ylabel("Signal")
-    plt.title(f"decrypted signal. Start time : {date}")
-    plt.show()
+    def file_path_list(self, esp_id, limit=3):
+        esp_path = Path(PATH_TO_FOLDER) / esp_id
+        file_paths = [Path(esp_path / file) for file in os.listdir(esp_path)]
+        return file_paths[:limit]
+    
+    def play_array(self, arr):
+        sd.play(arr, samplerate=FREQ_E)
+        sd.wait()
 
 
 if __name__ == "__main__":
-    FILE_PATH = "C:/Users/colin/COLIN/Mines/TI_IDS/Internest/internest/udp/bin_f/ESP32_1/1769769551281198.bin"
-    bin_dates, bin_data = date_data_tab(FILE_PATH, verbose=True)
-    dates, data = to_human_readable(bin_dates, bin_data, verbose=True)
-
-    series_number = 0
-    first_series = data[series_number, :]
-    first_date = dates[series_number]
-
-    plot_series(first_date, first_series)
+    Reader = ReadBin()
+    file_paths = Reader.file_path_list("ESP32_1", limit=200)
+    print(file_paths)
+    times, conc_data = Reader.concat_data(file_paths)
+    Reader.play_array(np.array(conc_data))
+    Reader.plot_series(conc_data, time_series=times)

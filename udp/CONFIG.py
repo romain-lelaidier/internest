@@ -1,7 +1,7 @@
 FREQ_E = 48000
 SIGNAL_MAX_VALUE = 1
 
-CHUNK_SIZE = 2048 * 3 + 64  # bits
+CHUNK_SIZE = 24040  # bits
 CHUNK_PER_FILE = 1
 
 # Network parameters
