@@ -78,11 +78,11 @@ def plot_series(date, series):
 
 
 if __name__ == "__main__":
-    FILE_PATH = "C:/Users/colin/COLIN/Mines/TI_IDS/Internest/internest/udp/bin_f/2026-01-28_15-16-25.271130.bin"
+    FILE_PATH = "C:/Users/colin/COLIN/Mines/TI_IDS/Internest/internest/udp/bin_f/ESP32_1/1769769551281198.bin"
     bin_dates, bin_data = date_data_tab(FILE_PATH, verbose=True)
     dates, data = to_human_readable(bin_dates, bin_data, verbose=True)
 
-    series_number = 5
+    series_number = 0
     first_series = data[series_number, :]
     first_date = dates[series_number]
 

@@ -4,14 +4,17 @@ import time
 from CONFIG import *
 
 
-def sin_sig(start_date):
-    freq = 440
+def sin_sig(start_date, sig_type="sin"):
+    freq1 = 440
+    freq2 = 330
     buf = b""
     number_of_points = (CHUNK_SIZE - BYTES_FOR_DATE * 8) // BITS_PER_POINT
-    print(number_of_points, (CHUNK_SIZE - BYTES_FOR_DATE * 8) / BITS_PER_POINT)
     for i in range(number_of_points):
         t = i / FREQ_E
-        real_value = math.sin(2 * math.pi * freq * (t + start_date))
+        if sig_type == "sin":
+            real_value = math.sin(2 * math.pi * freq1 * (t + start_date))
+        if sig_type == "sum_sin":
+            real_value = (math.sin(2 * math.pi * freq1 * (t + start_date)) + math.sin(2 * math.pi * freq2 * (t + start_date))) / 2
         encoded_value = round(
             real_value * 2 ** (BITS_PER_POINT - 1) / SIGNAL_MAX_VALUE
         )
@@ -26,21 +29,17 @@ def sin_sig(start_date):
 
 
 def encoded_byte_date():
-    date = time.time()
-    # on choisit une précision à l'heure.
-    max_value = 3600
-    max_int = 2 ** (8 * BYTES_FOR_DATE)
-    hour = date % max_value  # seconds of the current hour
-    return round(hour / max_value * max_int).to_bytes(8, "little"), hour
+    micros = round(time.time() * 1e6)
+    return micros.to_bytes(8, "little"), micros // 1e6
 
 
-def send_signal(server_ip, server_port):
+def send_signal(server_ip, server_port, sig_type="sin"):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         i = 0
         while True:
             date, start_date = encoded_byte_date()
-            data = sin_sig(start_date)
+            data = sin_sig(start_date, sig_type)
             signal = date + data
             sock.sendto(signal, (server_ip, server_port))
             if i % 25 == 0:
