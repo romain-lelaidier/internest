@@ -68,7 +68,7 @@ class ReadBin:
 
 if __name__ == "__main__":
     Reader = ReadBin()
-    file_paths = Reader.file_path_list("ESP32_1", limit=200)
+    file_paths = Reader.file_path_list("ESP32_2", limit=200)
     print(file_paths)
     times, conc_data = Reader.concat_data(file_paths)
     Reader.play_array(np.array(conc_data))
