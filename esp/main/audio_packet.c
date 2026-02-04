@@ -10,7 +10,7 @@
 #define I2S_PORT I2S_NUM_0
 
 // audio sampling
-#define SAMPLE_RATE         44100
+#define SAMPLE_RATE         48000
 #define BYTES_PER_SAMPLE    2
 
 // UDP packets
@@ -96,15 +96,16 @@ void send_audio_task(void *pvParameters) {
         if (samples_available >= PACKET_SIZE) {
             int sample_index = 0;
             while (sample_index < PACKET_SIZE && samples_available > 0) {
-                samples[1 + 8 + sample_index] = audio_buffer[read_index];
+                samples[6 + 8 + sample_index] = audio_buffer[read_index];
                 read_index = (read_index + 1) % (PACKET_SIZE * 2);
                 sample_index++;
                 samples_available--;
             }
             
             if (sample_index == PACKET_SIZE) {
-                if (1 || is_synced()) {
-                    t = micros();
+                if (is_synced()) {
+                    t = synced_micros();
+                    // printf("sending packet at t=%lld\n", t);
                     // samples[0] = ESP_ID;
                     memcpy(samples, mac, 6 * sizeof(char));
                     memcpy(samples + 6 * sizeof(char), &t, 8 * sizeof(char));

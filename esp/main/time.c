@@ -17,13 +17,25 @@
 #define MEASURE_OUT_PIN     6
 #endif
 
-struct Delta {
+typedef struct delta_builder {
     int64_t xs0, tau0;
     double alpha, beta_1, beta_2;
-};
+} delta_builder_t;
+
+typedef struct m_point {
+    double xs;
+    double qd[2];
+    bool used[2];
+    int i;
+    struct m_point* prev;
+    struct m_point* next;
+} m_point_t;
+
+m_point_t *first = NULL, *last = NULL;
+int n = 0;
 
 bool synced = false;
-struct Delta delta;
+delta_builder_t delta;
 
 int64_t micros(void) {
     return esp_timer_get_time();
@@ -39,16 +51,8 @@ int64_t synced_micros(void) {
     return m + delta.tau0 + (int64_t) (delta.alpha * (double) (m - delta.xs0) + (delta.beta_1 + delta.beta_2) / 2.0);
 }
 
-typedef struct MeasurePoint {
-    double xs;
-    double qd[2];
-    bool used[2];
-    struct MeasurePoint* prev;
-    struct MeasurePoint* next;
-} m_point;
-
-m_point* create_point(double xs, double q, double d) {
-    m_point* mp = malloc(sizeof(m_point));
+m_point_t* create_point(double xs, double q, double d) {
+    m_point_t* mp = malloc(sizeof(m_point_t));
     mp->xs = xs;
     mp->qd[0] = q;
     mp->qd[1] = d;
@@ -56,84 +60,35 @@ m_point* create_point(double xs, double q, double d) {
     mp->used[1] = true;
     mp->prev = NULL;
     mp->next = NULL;
+    mp->i = n++;
     return mp;
 }
 
-double interpolate(int u, m_point* i, double* a) {
-    if (i->used[u]) {
-        return i->qd[u];
-    }
-    m_point* il = i;
-    m_point* ir = i;
-    while (!il->used[u]) {
-        il = il->prev;
-    }
-    while (!ir->used[u]) {
-        ir = ir->next;
-    }
-    double aw = (double)(ir->qd[u] - il->qd[u]) / (double)(ir->xs - il->xs);
-    if (a != NULL) *a = aw;
-    return il->qd[u] + aw * (i->xs - il->xs);
-}
-
-void convex_aggregate(int u, m_point* i, m_point** i1, m_point** i2, double* D_star, m_point** t_star, double *alpha) {
-    double interpolated_i2, nD, s = u ? 1.0 : -1.0;
-    double au, a1u;
+void convex_aggregate(int u, m_point_t* i, m_point_t** ip, m_point_t** ipp) {
+    double interpolated_ip;
     bool can_stop = false;
-    m_point* nt;
     while (!can_stop) {
-        au = (i->qd[u] - (*i1)->qd[u]) / (i->xs - (*i1)->xs);
-        interpolated_i2 = (*i1)->qd[u] + au * ((*i2)->xs - (*i1)->xs);
-        if (interpolated_i2 == (*i2)->qd[u] || (interpolated_i2 > (*i2)->qd[u]) ^ u) {
-            // the previous point is now in the extended convex hull
+        interpolated_ip = (*ipp)->qd[u] + ((*ip)->xs - (*ipp)->xs) * (i->qd[u] - (*ipp)->qd[u]) / (i->xs - (*ipp)->xs);
+        if ((interpolated_ip > (*ip)->qd[u]) ^ u) {
+            // the previous point (ip) is now useless because inside the extended convex hull
             // we can remove it and backpropagate the new convex hull
-            
-            // removing i2 from the u enveloppe
-            (*i2)->used[u] = false;
-            if (!(*i2)->used[!u]) {
-                // i2 is not used at all, we can totally remove it from the chain
-                (*i2)->prev->next = (*i2)->next;
-                (*i2)->next->prev = (*i2)->prev;
-                free(*i2);
-            }
 
-            // the segment [i1, i] in domain u including point i has just been added.
-            // we must find the point t that minimizes the vertical distance between this segment
-            // and the other domain 1-u, and update D and alpha (a) accordingly.
-            nt = *i1;
-            nD = s * ((*i1)->qd[u] - interpolate(1-u, *i1, &a1u));
-            if (nD < *D_star) {
-                *D_star = nD;
-                *t_star = nt;
-                *alpha = a1u;
-            }
-            nt = i;
-            nD = s * (i->qd[u] - interpolate(1-u, i, &a1u));
-            if (nD < *D_star) {
-                *D_star = nD;
-                *t_star = nt;
-                *alpha = a1u;
-            }
-            nt = (*i1)->next;
-            while (nt != NULL) {
-                while (!nt->used[1-u]) {
-                    nt = nt->next;
-                }
-                nD = s * ((*i1)->qd[u] + au * (nt->xs - (*i1)->xs) - nt->qd[1-u]);
-                if (nD < *D_star) {
-                    *D_star = nD;
-                    *t_star = nt;
-                    *alpha = au;
-                }
-                nt = nt->next;
-            }
+            // removing ip from the u enveloppe
+            (*ip)->used[u] = false;
+            // if (!(*ip)->used[!u]) {
+            //     // ip is not used at all, we can totally remove it from the chain
+            //     (*ip)->prev->next = (*ip)->next;
+            //     (*ip)->next->prev = (*ip)->prev;
+            //     free(*ip);
+            // }
 
-            *i2 = (*i1);
-            *i1 = (*i1)->prev;
-            while ((*i1) != NULL && !(*i1)->used[u]) {
-                *i1 = (*i1)->prev;
+            *ip = *ipp;
+            *ipp = (*ipp)->prev;
+            while ((*ipp) != NULL && !(*ipp)->used[u]) {
+                *ipp = (*ipp)->prev;
             }
-            if ((*i1) == NULL) {
+            if ((*ipp) == NULL) {
+                // printf("# NULL???\n");
                 can_stop = true;
             }
         } else {
@@ -142,9 +97,8 @@ void convex_aggregate(int u, m_point* i, m_point** i1, m_point** i2, double* D_s
     }
 }
 
-void add_point(struct Delta* d, int64_t xs, int64_t ym, int64_t xr) {
-    static m_point *first = NULL, *last, *di1, *di2, *qi1, *qi2, *t_star;
-    static double D_star;
+void add_point(delta_builder_t* d, int64_t xs, int64_t ym, int64_t xr) {
+    static m_point_t *dipp, *dip, *qipp, *qip;
 
     if (d == NULL) {
         // cleaning previous queue
@@ -167,15 +121,13 @@ void add_point(struct Delta* d, int64_t xs, int64_t ym, int64_t xr) {
         // d->tau0 = 0;
     }
     
-    m_point* mp = create_point((double)(xs - d->xs0), (double)(ym - xr - d->tau0), (double)(ym - xs - d->tau0));
-    // printf("%lf, %lf, %lf,\n", mp->xs, mp->qd[0], mp->qd[1]);
+    m_point_t *mp = create_point((double)(xs - d->xs0), (double)(ym - xr - d->tau0), (double)(ym - xs - d->tau0));
+    printf("%lf, %lf, %lf,\n", mp->xs, mp->qd[0], mp->qd[1]);
 
     if (first == NULL) {
         // first node
         first = mp;
         last = mp;
-        D_star = mp->qd[1] - mp->qd[0];
-        t_star = mp;
         return;
     }
 
@@ -186,22 +138,78 @@ void add_point(struct Delta* d, int64_t xs, int64_t ym, int64_t xr) {
 
     if (first->next->next == NULL) {
         // 2 elements in list
-        qi1 = first;
-        di1 = first;
-        qi2 = first->next;
-        di2 = first->next;
+        qip = first->next;
+        qipp = first;
+        dip = first->next;
+        dipp = first;
         return;
     }
 
-    convex_aggregate(1, mp, &di1, &di2, &D_star, &t_star, &d->alpha);
-    convex_aggregate(0, mp, &qi1, &qi2, &D_star, &t_star, &d->alpha);
-    di1 = di2;
-    di2 = mp;
-    qi1 = qi2;
-    qi2 = mp;
+    convex_aggregate(0, mp, &qip, &qipp);
+    qipp = qip;
+    qip = mp;
+    convex_aggregate(1, mp, &dip, &dipp);
+    dipp = dip;
+    dip = mp;
+}
 
-    d->beta_1 = interpolate(0, t_star, NULL) - d->alpha * t_star->xs;
-    d->beta_2 = interpolate(1, t_star, NULL) - d->alpha * t_star->xs;
+double interpolate(int u, m_point_t* i) {
+    if (i->used[u]) {
+        return i->qd[u];
+    }
+    m_point_t* il = i;
+    m_point_t* ir = i;
+    while (!il->used[u]) {
+        il = il->prev;
+    }
+    while (!ir->used[u]) {
+        ir = ir->next;
+    }
+    return il->qd[u] + (i->xs - il->xs) * (ir->qd[u] - il->qd[u]) / (ir->xs - il->xs);
+}
+
+void compute_alphas(delta_builder_t* d) {
+    m_point_t *t = first;
+    m_point_t* t_star = t;
+    double d_star = t_star->qd[1] - t_star->qd[0];
+    double d_t, t_star_ext_q, t_star_ext_d;
+
+    double alpha_bl, alpha_br, alpha_tl, alpha_tr, alpha_min, alpha_max;
+    m_point_t *ibl, *ibr, *itl, *itr;
+
+    // get point where the smallest distance is reached
+    t = first;
+    while (t != NULL) {
+        d_t = interpolate(1, t) - interpolate(0, t);
+        if (d_t < d_star) {
+            d_star = d_t;
+            t_star = t;
+        }
+        t = t->next;
+    }
+
+    // compute alpha
+    t_star_ext_q = interpolate(0, t_star);
+    t_star_ext_d = interpolate(1, t_star);
+    ibl = t_star->prev;
+    itl = t_star->prev;
+    ibr = t_star->next;
+    itr = t_star->next;
+    while (!ibl->used[0]) ibl = ibl->prev;
+    while (!itl->used[1]) itl = itl->prev;
+    while (!ibr->used[0]) ibr = ibr->next;
+    while (!itr->used[1]) itr = itr->next;
+    alpha_bl = (t_star_ext_q - ibl->qd[0]) / (t_star->xs - ibl->xs);
+    alpha_tl = (t_star_ext_d - itl->qd[1]) / (t_star->xs - itl->xs);
+    alpha_br = (ibr->qd[0] - t_star_ext_q) / (ibr->xs - t_star->xs);
+    alpha_tr = (itr->qd[1] - t_star_ext_d) / (itr->xs - t_star->xs);
+
+    alpha_min = fmax(alpha_tl, alpha_br);
+    alpha_max = fmin(alpha_bl, alpha_tr);
+
+    d->alpha = (alpha_min + alpha_max) * 0.5;
+    d->beta_1 = t_star_ext_q - d->alpha * t_star->xs;
+    d->beta_2 = t_star_ext_d - d->alpha * t_star->xs;
 }
 
 void udp_clock_sync(void) {
@@ -213,7 +221,6 @@ void udp_clock_sync(void) {
     strcpy(payload, (const char*) "/time/");
 
     int i, si, len;
-    struct Delta d;
     int64_t xs, ym, xr, xm = -1, ym_est = -1;
 
 #ifdef GPIO_MEASURE
@@ -239,7 +246,7 @@ void udp_clock_sync(void) {
         /* envoi de la requête */
         xs = micros();
         udp_send_socket(sck, payload, 8);
-        
+
 #ifdef GPIO_MEASURE        
         can_break = false;
         while (!can_break) {
@@ -254,29 +261,36 @@ void udp_clock_sync(void) {
         xr = micros();
         /* réponse reçue ou timeout écoulé */
 
-        if (len >= 0) {
+        if (len >= 0) { 
             /* réponse reçue */
             char id0 = rx_buffer[6];
-            int id1 = (int) rx_buffer[7];
-            if (id0 == 0 && i%255 == id1) {
+            char id1 = rx_buffer[7];
+            if (id0 == 0 && (char) (i%255) == id1) {
                 memcpy(&ym, rx_buffer + 8, 8);
-                add_point(&d, xs, ym, xr);
+                add_point(&delta, xs, ym, xr);
                 // printf("%lld, %lld, %lld, %lld, %lld,\n", xs, xr, ym, xm, ym_est);
                 i++;
             } else {
-                printf("%c, %d ???? %i, %c\n", id0, id1, si, (char) si);
+                // printf("%c, %d ???? %i, %c\n", id0, id1, si, (char) si);
             }
         }
 
         if (i % SYNC_PER_SALVE == 0) {
             si++;
-            
-            if (fabs(d.alpha) < 0.0001) {
-                memcpy(&delta, &d, sizeof(struct Delta));
-                printf("# alpha = %.*e, beta in [%lf, %lf] (l=%lf)\n", DECIMAL_DIG, d.alpha, d.beta_1, d.beta_2, d.beta_2-d.beta_1);
+
+            printf("# End of salve\n");
+            compute_alphas(&delta);
+            if (si >= 2 && delta.beta_2 - delta.beta_1 < 2500) {
                 synced = true;
-                vTaskDelay(SYNC_PERIOD / portTICK_PERIOD_MS);
             }
+            printf("# alpha = %.*e, beta in [%lf, %lf] (l=%lf)\n", DECIMAL_DIG, delta.alpha, delta.beta_1, delta.beta_2, delta.beta_2-delta.beta_1);
+
+            vTaskDelay(SYNC_PERIOD / portTICK_PERIOD_MS);
+            
+            // if (fabs(d.alpha) < 0.0001) {
+            //     memcpy(&delta, &d, sizeof(struct Delta));
+            //     synced = true;
+            // }
 
             // if (fabs(d.beta_2 - d.beta_1 - delta_beta) > 0.5) {
             //     delta_beta = d.beta_2 - d.beta_1;
