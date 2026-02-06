@@ -24,6 +24,12 @@ menu "Internest Configuration"
         help
             UDP server port for sending audio packages.
 
+    config ESP_UDP_BUZZER_PORT
+        string "Buzzer server port"
+        default "80"
+        help
+            UDP server port for ESP buzzer calibration.
+
     config ESP_UDP_SYNC_PORT
         string "Sync server port"
         default "80"

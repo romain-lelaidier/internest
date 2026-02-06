@@ -122,7 +122,7 @@ void add_point(delta_builder_t* d, int64_t xs, int64_t ym, int64_t xr) {
     }
     
     m_point_t *mp = create_point((double)(xs - d->xs0), (double)(ym - xr - d->tau0), (double)(ym - xs - d->tau0));
-    printf("%lf, %lf, %lf,\n", mp->xs, mp->qd[0], mp->qd[1]);
+    printf("%lld, %lld, %lld,\n", xs - d->xs0, ym - xr - d->tau0, ym - xs - d->tau0);
 
     if (first == NULL) {
         // first node
@@ -216,11 +216,12 @@ void udp_clock_sync(void) {
     UDPSocket* sck = udp_create_socket(UDP_IP, SYNC_UDP_PORT);
     udp_connect_socket(sck, 1 * 1000000);
 
-    char rx_buffer[20];
-    char payload[8];
-    strcpy(payload, (const char*) "/time/");
+    char rx_buffer[21];
+    char payload[2];
+    // strcpy(payload, (const char*) "/time/");
 
-    int i, si, len;
+    int si, len;
+    int16_t i;
     int64_t xs, ym, xr, xm = -1, ym_est = -1;
 
 #ifdef GPIO_MEASURE
@@ -232,8 +233,9 @@ void udp_clock_sync(void) {
     add_point(NULL, 0, 0, 0);
     while(1) {
 
-        payload[6] = 0;
-        payload[7] = (char) (i%255);
+        // payload[0] = 0;
+        // payload[1] = (char) (i%255);
+        memcpy(payload, &i, 2);
 
 #ifdef GPIO_MEASURE
         can_break = false;
@@ -245,7 +247,7 @@ void udp_clock_sync(void) {
 
         /* envoi de la requête */
         xs = micros();
-        udp_send_socket(sck, payload, 8);
+        udp_send_socket(sck, payload, 2);
 
 #ifdef GPIO_MEASURE        
         can_break = false;
@@ -261,18 +263,20 @@ void udp_clock_sync(void) {
         xr = micros();
         /* réponse reçue ou timeout écoulé */
 
-        if (len >= 0) { 
+        if (len == 20 && memcmp(rx_buffer, rx_buffer + 10, 10) == 0) {
             /* réponse reçue */
-            char id0 = rx_buffer[6];
-            char id1 = rx_buffer[7];
-            if (id0 == 0 && (char) (i%255) == id1) {
-                memcpy(&ym, rx_buffer + 8, 8);
+            if (memcmp(rx_buffer, &i, 2) == 0) {
+                memcpy(&ym, rx_buffer + 2, 8);
                 add_point(&delta, xs, ym, xr);
-                // printf("%lld, %lld, %lld, %lld, %lld,\n", xs, xr, ym, xm, ym_est);
                 i++;
             } else {
-                // printf("%c, %d ???? %i, %c\n", id0, id1, si, (char) si);
+                memcpy(&i, rx_buffer, 2);
+                printf("# skipped\n");
+                i++;
             }
+        } else {
+            printf("# error !\n");
+            i++;
         }
 
         if (i % SYNC_PER_SALVE == 0) {
@@ -280,12 +284,20 @@ void udp_clock_sync(void) {
 
             printf("# End of salve\n");
             compute_alphas(&delta);
-            if (si >= 2 && delta.beta_2 - delta.beta_1 < 2500) {
-                synced = true;
-            }
-            printf("# alpha = %.*e, beta in [%lf, %lf] (l=%lf)\n", DECIMAL_DIG, delta.alpha, delta.beta_1, delta.beta_2, delta.beta_2-delta.beta_1);
 
-            vTaskDelay(SYNC_PERIOD / portTICK_PERIOD_MS);
+            if (delta.beta_2 - delta.beta_1 <= 0) {
+                synced = false;
+                add_point(NULL, 0, 0, 0);
+                printf("Negative DB -> restarting sync\n");
+                // return;
+            } else {
+                if (si >= 3) {
+                    synced = true;
+                }
+                printf("# alpha = %.*e, beta in [%lf, %lf] (l=%lf)\n", DECIMAL_DIG, delta.alpha, delta.beta_1, delta.beta_2, delta.beta_2-delta.beta_1);
+                vTaskDelay(SYNC_PERIOD / portTICK_PERIOD_MS);
+            }
+
             
             // if (fabs(d.alpha) < 0.0001) {
             //     memcpy(&delta, &d, sizeof(struct Delta));

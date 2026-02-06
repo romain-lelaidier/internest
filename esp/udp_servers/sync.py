@@ -19,11 +19,11 @@ while True:
 
 	t = micros()
 	pin_written_at = t
-	rmsg = message + t.to_bytes(8, 'little') + b'\0'
+	rmsg = message + t.to_bytes(8, 'little')
 	printer += f" {t}"
 
 	if random.random() < packet_loss_prob:
 		print("dropping socket")
 	else:
 		print(printer)
-		server_socket.sendto(rmsg, address)
+		server_socket.sendto(rmsg + rmsg + '\0', address)

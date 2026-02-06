@@ -8,6 +8,7 @@
 #include "audio_packet.h"
 #include "time.h"
 #include "outputs.h"
+#include "buzzer.h"
 
 static const char *TAG = "main";
 
@@ -39,6 +40,11 @@ void app_main(void) {
 
     // Time synchronization task
     xTaskCreate(sync_time, "sync_time", 4096, NULL, 6, NULL);
+
+    UDPSocket* sck = udp_create_socket(CONFIG_ESP_UDP_IP, atoi(CONFIG_ESP_UDP_BUZZER_PORT));
+    udp_connect_socket(sck, 1 * 1000000);
+    int64_t buzzing_time;
+
 
     // while (1) {
     //     double f = 1380 + 50 * cos((double) micros() / 1000.0);

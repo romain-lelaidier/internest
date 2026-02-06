@@ -25,6 +25,6 @@ while True:
         # esp_id = int(message[0])
         esp_time = int.from_bytes(message[6:6+8], 'little')
         micros = round(time.time() * 1e6)
-        open(f"{dir}/{mac}_{esp_time}.bin", "wb").write(message[9:])
+        open(f"{dir}/{mac}_{esp_time}.bin", "wb").write(message[6+8:])
 
         print(f"packet of length {len(message)-14} from {mac} with ts {esp_time} (delta = {micros - esp_time})")
