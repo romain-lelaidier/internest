@@ -2,7 +2,7 @@ import numpy as np
 from scipy import signal
 
 THEORETICAL_SAMPLE_RATE = 48000     # sample rate théorique des ESP
-MAX_WINDOW_S = 5                    # durée maximale d'enregistrement (au-delà, on oublie les paquets)
+MAX_WINDOW_S = 20                    # durée maximale d'enregistrement (au-delà, on oublie les paquets)
 
 WINDOW_BUFFER_SIZE = MAX_WINDOW_S * THEORETICAL_SAMPLE_RATE
 
