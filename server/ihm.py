@@ -10,6 +10,9 @@ Usage depuis main.py :
 
 Usage depuis birdnet_loop.py :
     from ihm import notify_arrival, notify_departure
+
+Debug standalone :
+    python ihm.py
 """
 
 import time
@@ -86,7 +89,7 @@ def start_ihm():
 
 # --- Template HTML ---
 
-HTML = """
+HTML = r"""
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -152,3 +155,14 @@ HTML = """
 </body>
 </html>
 """
+
+
+if __name__ == '__main__':
+    notify_arrival('aa:bb:cc:dd:ee:01', 'Merle noir', 0.92)
+    notify_arrival('aa:bb:cc:dd:ee:01', 'Mesange bleue', 0.78)
+    notify_arrival('aa:bb:cc:dd:ee:02', 'Rouge-gorge familier', 0.85)
+    notify_departure('aa:bb:cc:dd:ee:02', 'Pinson des arbres')
+    notify_arrival('aa:bb:cc:dd:ee:01', 'Tourterelle turque', 0.61)
+
+    print(f"Mode debug — http://localhost:{IHM_PORT}")
+    app.run(host='0.0.0.0', port=IHM_PORT, debug=True)
