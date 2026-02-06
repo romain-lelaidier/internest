@@ -71,6 +71,7 @@ def _esp_loop(mac, esp):
         t1 = last_analyzed_t
         t2 = t1 + BIRDNET_WINDOW_S * 1e6
         _, _, samples = esp.read_window(t1, t2)
+        samples = samples.copy()  # copie pour éviter les conflits TFLite / buffer partagé
         last_analyzed_t = t2
 
         if len(samples) < THEORETICAL_SAMPLE_RATE:
