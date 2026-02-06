@@ -65,7 +65,6 @@ class BirdTracker:
             self.next_id += 1
             return new_id
 
-
 def detect_bird_segments(y, sr, f_min=800, n_sigma=3.0, min_duration=0.01):
     """ Détecte les zones d'activité dans le signal audio """
     if len(y) == 0: return []
@@ -281,16 +280,6 @@ WINDOW_SIZE_VAD_US = 2.0 * 1e6    # Fenêtre large pour la détection (2s)
 WINDOW_SIZE_TDOA_US = 0.3 * 1e6   # Fenêtre courte pour le TDOA (0.3s)
 BUFFER_DELAY_US = 0.5 * 1e6       # On regarde 1s en arrière (pour être sûr que les paquets sont arrivés)
 
-# Mapping : Quelle adresse MAC correspond à quel ID de micro ?
-# REMPLACE PAR TES VRAIES ADRESSES MAC
-MAC_TO_ID = {
-    "1c:db:d4:34:5c:04": 0,
-    "1c:db:d4:38:43:00": 1,
-    "aa:bb:cc:dd:ee:02": 2,
-    "aa:bb:cc:dd:ee:03": 3,
-    "aa:bb:cc:dd:ee:04": 4
-}
-
 # Position des micros (ID -> [x, y, z])
 MIC_POSITIONS = {
     0: [0, 0, 0],
@@ -318,20 +307,19 @@ def localiser(_esps, t_start_vad, t_end_vad):
     # Extraction pour la VAD (Somme des énergies)
     # On a besoin d'un signal de référence temporel, prenons le premier micro valide
     ref_len = 0
-        
+
     for mac_addr, esp_obj in _esps.items():
-        if mac_addr in MAC_TO_ID:
-            # On extrait 2 secondes de signal
-            _, _, sig = esp_obj.read_window(t_start_vad, t_end_vad)
-                
-            if len(sig) > 0:
-                if ref_len == 0: ref_len = len(sig)
-                # Sécurité taille pour la somme numpy
-                if len(sig) != ref_len:
-                    sig = np.resize(sig, ref_len)
-                    
-                vad_signals.append(sig)
-                mic_ids_map.append(MAC_TO_ID[mac_addr])
+        # On extrait 2 secondes de signal
+        _, _, sig = esp_obj.read_window(t_start_vad, t_end_vad)
+
+        if len(sig) > 0:
+            if ref_len == 0: ref_len = len(sig)
+            # Sécurité taille pour la somme numpy
+            if len(sig) != ref_len:
+                sig = np.resize(sig, ref_len)
+
+            vad_signals.append(sig)
+            mic_ids_map.append(esp_obj.id)
 
     # B. DÉTECTION (Sur la somme des 2s)
     if len(vad_signals) > 0:
@@ -359,14 +347,14 @@ def localiser(_esps, t_start_vad, t_end_vad):
             tdoa_signals_dict = {}
                 
             for mac_addr, esp_obj in _esps.items():
-                if mac_addr in MAC_TO_ID:
-                    mic_id = MAC_TO_ID[mac_addr]
-                    # Extraction chirurgicale
-                    _, _, sig_tdoa = esp_obj.read_window(t_start_tdoa, t_end_tdoa)
-                    
-                    if len(sig_tdoa) > 0 and not np.all(sig_tdoa == 0):
-                        tdoa_signals_dict[mic_id] = sig_tdoa
+                mic_id = esp_obj.id
+                # Extraction chirurgicale
+                _, _, sig_tdoa = esp_obj.read_window(t_start_tdoa, t_end_tdoa)
                 
+                if len(sig_tdoa) > 0 and not np.all(sig_tdoa == 0):
+                    tdoa_signals_dict[mic_id] = sig_tdoa
+                
+            print(tdoa_signals_dict)
             # 4. Localisation
             if len(tdoa_signals_dict) >= 4:
                 pos, cost = localizer.locate(tdoa_signals_dict)

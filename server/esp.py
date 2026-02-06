@@ -7,8 +7,9 @@ MAX_WINDOW_S = 20                    # dur√©e maximale d'enregistrement (au-del√
 WINDOW_BUFFER_SIZE = MAX_WINDOW_S * THEORETICAL_SAMPLE_RATE
 
 class ESP:
-    def __init__(self, mac):
+    def __init__(self, mac, id):
         self.mac = mac
+        self.id = id
         self.buffer = np.zeros(WINDOW_BUFFER_SIZE, dtype=np.int16)
         self.silenced = np.zeros(WINDOW_BUFFER_SIZE, dtype=bool)
         self.t0 = None

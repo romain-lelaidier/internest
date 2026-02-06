@@ -16,20 +16,20 @@ PACKET_LENGTH = 1024*8*3    # nombre d'octets de data d'un paquet (sans les meta
 
 esps = {}
 
-def routine_audio_server(e):
+async def use_packet(mac, esp_time, samples, rpi_time):
+    if mac not in esps:
+        esps[mac] = ESP(mac, len(esps))
+        print(f"new ESP: {mac}")
+        start_birdnet(mac, esps[mac])
+    print(f" ⸱ received a packet of length {len(samples)} from {mac} with ts {esp_time} (delta = {rpi_time - esp_time})")
+    esps[mac].receive_packet(esp_time, samples)
+
+def routine_audio_server(_):
+    global esps
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind(('', PORT_AUDIO))
-
-    async def use_packet(mac, esp_time, samples, rpi_time):
-        if mac not in e:
-            e[mac] = ESP(mac)
-            print(f"new ESP: {mac}")
-            start_birdnet(mac, e[mac])
-            
-        print(f" ⸱ received a packet of length {len(samples)} from {mac} with ts {esp_time} (delta = {rpi_time - esp_time})")
-        e[mac].receive_packet(esp_time, samples)
 
     while True:
         message, address = server_socket.recvfrom(ESP_ID_LENGTH + ESP_TIME_LENGTH + PACKET_LENGTH)
@@ -64,7 +64,7 @@ def routine_sync_server(_):
 def routine_wrapper(func):
     while True:
         try:
-            func(esps)
+            func()
         except Exception as err:
             print(err)
 
