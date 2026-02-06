@@ -10,7 +10,7 @@ class ESP:
     def __init__(self, mac):
         self.mac = mac
         self.buffer = np.zeros(WINDOW_BUFFER_SIZE, dtype=np.int16)
-        self.silenced = np.zeros(WINDOW_BUFFER_SIZE, dtype=np.bool)
+        self.silenced = np.zeros(WINDOW_BUFFER_SIZE, dtype=bool)
         self.t0 = None
         self.buffer_end_t = None
         self.last_written_index = 0
@@ -80,4 +80,4 @@ class ESP:
         if i_r1 // WINDOW_BUFFER_SIZE == i_r2 // WINDOW_BUFFER_SIZE:
             return int(t_r1), int(t_r2), self.buffer[i_r1 % WINDOW_BUFFER_SIZE : i_r2 % WINDOW_BUFFER_SIZE]
         
-        return int(t_r1), int(t_r2), np.concat((self.buffer[i_r1 % WINDOW_BUFFER_SIZE : WINDOW_BUFFER_SIZE], self.buffer[0 : i_r2 % WINDOW_BUFFER_SIZE]))
+        return int(t_r1), int(t_r2), np.concatenate((self.buffer[i_r1 % WINDOW_BUFFER_SIZE : WINDOW_BUFFER_SIZE], self.buffer[0 : i_r2 % WINDOW_BUFFER_SIZE]))

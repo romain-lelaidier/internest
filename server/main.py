@@ -18,6 +18,7 @@ esps = {}
 def routine_audio_server(e):
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind(('', PORT_AUDIO))
 
     async def use_packet(mac, esp_time, samples, rpi_time):
@@ -45,6 +46,7 @@ def routine_audio_server(e):
 def routine_sync_server(_):
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind(('', PORT_SYNC))
 
     while True:
