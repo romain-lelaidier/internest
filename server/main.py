@@ -1,7 +1,7 @@
 import numpy as np
 import socket
 import asyncio
-from multiprocessing import Process
+import threading
 
 from esp import ESP
 from utils import micros, add_padding_zeros
@@ -17,6 +17,7 @@ PACKET_LENGTH = 1024*8*3    # nombre d'octets de data d'un paquet (sans les meta
 esps = {}
 
 async def use_packet(mac, esp_time, samples, rpi_time):
+    global esps
     if mac not in esps:
         esps[mac] = ESP(mac, len(esps))
         print(f"new ESP: {mac}")
@@ -76,4 +77,4 @@ if __name__ == "__main__":
     ]
 
     for routine in routines:
-        Process(target=routine_wrapper, args=(routine,)).start()
+        threading.Thread(target=routine_wrapper, args=(routine,)).start()
