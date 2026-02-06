@@ -60,7 +60,7 @@ def _esp_loop(mac, esp):
             now = time.time()
             departed = [sp for sp, ts in active_species.items() if now - ts > SPECIES_TIMEOUT_S]
             for sp in departed:
-                print(f"Espèce {sp} partie de {mac} (dernière détection il y a {now - active_species[sp]:.1f}s)")
+                print(f"<<<Espèce {sp} partie de {mac} (dernière détection il y a {now - active_species[sp]:.1f}s)")
                 if AFFICHAGE_IHM:
                     notify_departure(mac, sp)
                 del active_species[sp]
@@ -91,11 +91,11 @@ def _esp_loop(mac, esp):
                 species = det['common_name']
                 is_new = species not in active_species
                 if is_new:
-                    print(f"Espèce {species} arrivée sur {mac} (confidence {det['confidence']:.2f})")
+                    print(f">>> Espèce {species} arrivée sur {mac} (confidence {det['confidence']:.2f})")
                     if AFFICHAGE_IHM:
                         notify_arrival(mac, species, det['confidence'])
                 else:
-                    print(f"Espèce {species} toujours sur {mac} (confidence {det['confidence']:.2f})")
+                    print(f"=== Espèce {species} toujours sur {mac} (confidence {det['confidence']:.2f})")
                 active_species[species] = now
         except Exception as e:
             print(f"Erreur BirdNET pour {mac}: {e}")
@@ -103,7 +103,7 @@ def _esp_loop(mac, esp):
         # vérifier les départs
         departed = [sp for sp, ts in active_species.items() if now - ts > SPECIES_TIMEOUT_S]
         for sp in departed:
-            print(f"Espèce {sp} partie de {mac} (dernière détection il y a {now - active_species[sp]:.1f}s)")
+            print(f"<<< Espèce {sp} partie de {mac} (dernière détection il y a {now - active_species[sp]:.1f}s)")
             if AFFICHAGE_IHM:
                 notify_departure(mac, sp)
             del active_species[sp]
