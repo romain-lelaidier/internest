@@ -19,8 +19,9 @@ from birdnetlib.analyzer import Analyzer
 from birdnetlib import RecordingBuffer  # ça nous permet de ne pas passer par des wav temporaires.
 
 from esp import THEORETICAL_SAMPLE_RATE
+from ihm import notify_arrival, notify_departure
 
-BIRDNET_WINDOW_S = 15.0         # durée de la fenêtre d'analyse (secondes)
+BIRDNET_WINDOW_S = 5.0         # durée de la fenêtre d'analyse (secondes)
 BIRDNET_MIN_CONFIDENCE = 0.5    # seuil de confiance minimum
 SPECIES_TIMEOUT_S = 30.0        # durée sans détection → départ
 POLL_INTERVAL_S = 0.5           # fréquence de vérification du buffer
@@ -58,7 +59,8 @@ def _esp_loop(mac, esp):
             now = time.time()
             departed = [sp for sp, ts in active_species.items() if now - ts > SPECIES_TIMEOUT_S]
             for sp in departed:
-                print(f"[DEPART] {sp} de {mac}")
+                print(f"Espèce {sp} partie de {mac} (dernière détection il y a {now - active_species[sp]:.1f}s)")
+                notify_departure(mac, sp)
                 del active_species[sp]
             time.sleep(POLL_INTERVAL_S)
             continue
@@ -79,12 +81,18 @@ def _esp_loop(mac, esp):
                 analyzer, samples, THEORETICAL_SAMPLE_RATE,
                 min_conf=BIRDNET_MIN_CONFIDENCE
             )
+            print(f"Analyse BirdNET pour {mac} de {t1} à {t2} ({len(samples)} samples)")
             recording.analyze()
+
 
             for det in recording.detections:
                 species = det['common_name']
-                if species not in active_species:
-                    print(f"[ARRIVEE] {species} sur {mac} (confiance={det['confidence']:.0%})")
+                is_new = species not in active_species
+                if is_new:
+                    print(f"Espèce {species} arrivée sur {mac} (confidence {det['confidence']:.2f})")
+                    notify_arrival(mac, species, det['confidence'])
+                else:
+                    print(f"Espèce {species} toujours sur {mac} (confidence {det['confidence']:.2f})")
                 active_species[species] = now
         except Exception as e:
             print(f"Erreur BirdNET pour {mac}: {e}")
@@ -92,7 +100,7 @@ def _esp_loop(mac, esp):
         # vérifier les départs
         departed = [sp for sp, ts in active_species.items() if now - ts > SPECIES_TIMEOUT_S]
         for sp in departed:
-            print(f"[DEPART] {sp} de {mac}")
+            print(f"Espèce {sp} partie de {mac} (dernière détection il y a {now - active_species[sp]:.1f}s)")
             del active_species[sp]
 
 
