@@ -6,6 +6,7 @@ from multiprocessing import Process
 from esp import ESP
 from utils import micros, add_padding_zeros
 from birdnet_loop import start_birdnet
+from localisation import routine_localiser
 
 PORT_AUDIO = 8002           # port d'écoute UDP pour les paquets audio
 PORT_SYNC = 8001            # port d'écoute UDP pour les paquets audio
@@ -70,7 +71,8 @@ def routine_wrapper(func):
 if __name__ == "__main__":
     routines = [
         routine_audio_server,
-        routine_sync_server
+        routine_sync_server,
+        routine_localiser
     ]
 
     for routine in routines:
