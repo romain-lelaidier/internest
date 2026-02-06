@@ -18,7 +18,7 @@ Debug standalone :
 import time
 import threading
 from collections import deque
-from flask import Flask, jsonify, render_template_string
+from flask import Flask, jsonify
 
 app = Flask(__name__)
 
@@ -62,13 +62,13 @@ def notify_departure(mac, species):
 
 @app.route('/')
 def index():
-    now = time.time()
-    return render_template_string(HTML, active=active_species, events=list(events)[:30], now=now)
+    return HTML
 
 
 @app.route('/api/status')
 def api_status():
     return jsonify({
+        'now': time.time(),
         'active': {
             mac: {sp: info for sp, info in species.items()}
             for mac, species in active_species.items()
@@ -89,12 +89,10 @@ def start_ihm():
 
 # --- Template HTML ---
 
-HTML = r"""
-<!DOCTYPE html>
+HTML = """<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="utf-8">
-    <meta http-equiv="refresh" content="5">
     <title>InterNest</title>
     <style>
         body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
@@ -111,50 +109,63 @@ HTML = r"""
     </style>
 </head>
 <body>
-    <h1>InterNest</h1>
+    <h1>InterNest - Detection d'especes en temps reel.</h1>
 
-    <h2>Especes actives</h2>
-    {% if active %}
-        {% for mac, species in active.items() %}
-        <div class="esp-block">
-            <strong>{{ mac }}</strong>
-            {% if species %}
-                {% for sp, info in species.items() %}
-                <div class="species">
-                    {{ sp }} — <span class="confidence">{{ "%.0f"|format(info.confidence * 100) }}%</span>
-                </div>
-                {% endfor %}
-            {% else %}
-                <div class="empty">aucune espece</div>
-            {% endif %}
-        </div>
-        {% endfor %}
-    {% else %}
-        <p class="empty">aucun ESP connecte</p>
-    {% endif %}
+    <h2>Especes actives par ESP</h2>
+    <div id="active"></div>
 
     <h2>Evenements recents</h2>
-    {% if events %}
-        {% for ev in events %}
-        <div class="event">
-            <span class="time">{{ "%.0f"|format(now - ev.time) }}s</span>
-            {% if ev.type == 'arrivee' %}
-                <span class="arrivee">[ARRIVEE]</span>
-            {% else %}
-                <span class="depart">[DEPART]</span>
-            {% endif %}
-            {{ ev.species }} sur <strong>{{ ev.mac }}</strong>
-            {% if ev.confidence is defined and ev.type == 'arrivee' %}
-                (<span class="confidence">{{ "%.0f"|format(ev.confidence * 100) }}%</span>)
-            {% endif %}
-        </div>
-        {% endfor %}
-    {% else %}
-        <p class="empty">aucun evenement</p>
-    {% endif %}
+    <div id="events"></div>
+
+    <script>
+    function refresh() {
+        fetch('/api/status')
+            .then(r => r.json())
+            .then(data => {
+                const now = data.now;
+
+                // especes actives
+                const activeDiv = document.getElementById('active');
+                const macs = Object.keys(data.active);
+                if (macs.length === 0) {
+                    activeDiv.innerHTML = '<p class="empty">aucun ESP connecte</p>';
+                } else {
+                    activeDiv.innerHTML = macs.map(mac => {
+                        const species = data.active[mac];
+                        const names = Object.keys(species);
+                        const inner = names.length === 0
+                            ? '<div class="empty">aucune espece</div>'
+                            : names.map(sp =>
+                                `<div class="species">${sp} — <span class="confidence">${Math.round(species[sp].confidence * 100)}%</span></div>`
+                              ).join('');
+                        return `<div class="esp-block"><strong>${mac}</strong>${inner}</div>`;
+                    }).join('');
+                }
+
+                // evenements
+                const evDiv = document.getElementById('events');
+                if (data.events.length === 0) {
+                    evDiv.innerHTML = '<p class="empty">aucun evenement</p>';
+                } else {
+                    evDiv.innerHTML = data.events.map(ev => {
+                        const ago = Math.round(now - ev.time);
+                        const tag = ev.type === 'arrivee'
+                            ? '<span class="arrivee">[ARRIVEE]</span>'
+                            : '<span class="depart">[DEPART]</span>';
+                        const conf = ev.type === 'arrivee' && ev.confidence != null
+                            ? ` (<span class="confidence">${Math.round(ev.confidence * 100)}%</span>)`
+                            : '';
+                        return `<div class="event"><span class="time">${ago}s</span> ${tag} ${ev.species} sur <strong>${ev.mac}</strong>${conf}</div>`;
+                    }).join('');
+                }
+            });
+    }
+
+    refresh();
+    setInterval(refresh, 2000);
+    </script>
 </body>
-</html>
-"""
+</html>"""
 
 
 if __name__ == '__main__':
