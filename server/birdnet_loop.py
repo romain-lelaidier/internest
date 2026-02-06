@@ -25,6 +25,7 @@ BIRDNET_WINDOW_S = 5.0         # durée de la fenêtre d'analyse (secondes)
 BIRDNET_MIN_CONFIDENCE = 0.5    # seuil de confiance minimum
 SPECIES_TIMEOUT_S = 30.0        # durée sans détection → départ
 POLL_INTERVAL_S = 0.5           # fréquence de vérification du buffer
+AFFICHAGE_IHM = True            # si False, on ne notifie pas l'IHM
 
 # Chargement du modèle BirdNET (une seule fois à l'import)
 print("Chargement du modele BirdNET...")
@@ -60,7 +61,8 @@ def _esp_loop(mac, esp):
             departed = [sp for sp, ts in active_species.items() if now - ts > SPECIES_TIMEOUT_S]
             for sp in departed:
                 print(f"Espèce {sp} partie de {mac} (dernière détection il y a {now - active_species[sp]:.1f}s)")
-                notify_departure(mac, sp)
+                if AFFICHAGE_IHM:
+                    notify_departure(mac, sp)
                 del active_species[sp]
             time.sleep(POLL_INTERVAL_S)
             continue
@@ -90,7 +92,8 @@ def _esp_loop(mac, esp):
                 is_new = species not in active_species
                 if is_new:
                     print(f"Espèce {species} arrivée sur {mac} (confidence {det['confidence']:.2f})")
-                    notify_arrival(mac, species, det['confidence'])
+                    if AFFICHAGE_IHM:
+                        notify_arrival(mac, species, det['confidence'])
                 else:
                     print(f"Espèce {species} toujours sur {mac} (confidence {det['confidence']:.2f})")
                 active_species[species] = now
@@ -101,6 +104,8 @@ def _esp_loop(mac, esp):
         departed = [sp for sp, ts in active_species.items() if now - ts > SPECIES_TIMEOUT_S]
         for sp in departed:
             print(f"Espèce {sp} partie de {mac} (dernière détection il y a {now - active_species[sp]:.1f}s)")
+            if AFFICHAGE_IHM:
+                notify_departure(mac, sp)
             del active_species[sp]
 
 
