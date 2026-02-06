@@ -2,13 +2,7 @@
 Module d'analyse en continu pour birdnet (version monothread).
 
 Un seul thread BirdNET qui round-robin sur tous les ESP enregistrés.
-Plus adapté au Raspberry Pi : une seule analyse à la fois, moins d'overhead.
-
-Usage depuis main.py :
-    from birdnet_loop_monothread import register_esp, start_birdnet
-    start_birdnet()
-    # puis à chaque nouvel ESP :
-    register_esp(mac, esp)
+Une seule analyse à la fois.
 """
 
 import time
