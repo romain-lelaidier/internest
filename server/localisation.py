@@ -224,8 +224,8 @@ class TDOAEngine:
                     for pidx in top_peaks:
                         d = self._refine_peak_parabolic(cc, pidx, lags)
                         # Check physique
-                        pos_i = self.mic_positions[id_i]
-                        pos_j = self.mic_positions[id_j]
+                        pos_i = np.array(self.mic_positions[id_i])
+                        pos_j = np.array(self.mic_positions[id_j])
                         if self._is_delay_physically_valid(d, pos_i, pos_j):
                             delays_for_pair.append(d)
                 
@@ -358,6 +358,7 @@ def localiser(_esps, t_start_vad, t_end_vad):
             # 4. Localisation
             if len(tdoa_signals_dict) >= 4:
                 pos, cost = localizer.locate(tdoa_signals_dict)
+                print("output: ", pos, cost)
                     
                 if pos is not None:
                     print(f"   🦜 Cri à T+{t_rel:.2f}s -> 📍 X={pos[0]:.1f} Y={pos[1]:.1f} Z={pos[2]:.1f}")
@@ -367,11 +368,10 @@ def localiser(_esps, t_start_vad, t_end_vad):
                         csv.writer(f).writerow([t_cri_us, f"{pos[0]:.2f}", f"{pos[1]:.2f}", f"{pos[2]:.2f}", f"{cost:.2f}"])
 
 def routine_localiser(esps):
-    print("ha")
     while True:
         t = micros()
         print(t)
         target_t2 = t - BUFFER_DELAY_US
         target_t1 = target_t2 - WINDOW_SIZE_VAD_US        
-        print(localiser(esps, target_t1, target_t2))  
+        localiser(esps, target_t1, target_t2)  
         time.sleep(COMPUTE_INTERVAL_US / 1e6)
