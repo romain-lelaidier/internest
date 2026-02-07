@@ -8,6 +8,9 @@ from utils import micros, add_padding_zeros
 from birdnet_loop import start_birdnet
 from localisation import routine_localiser
 
+from ihm import start_ihm   # Pour l'IHM birdnet
+from ihm_localisation import start_ihm_localisation # Pour l'IHM localisation
+
 PORT_AUDIO = 8002           # port d'écoute UDP pour les paquets audio
 PORT_SYNC = 8001            # port d'écoute UDP pour les paquets audio
 ESP_ID_LENGTH = 6           # nombre d'octets pour identifier un ESP
@@ -70,6 +73,12 @@ def routine_wrapper(func):
             print(err)
 
 if __name__ == "__main__":
+
+    # On lance les IHM qui lancent leurs propres threads daemon.
+    # A tester, si problème lors de l'execution du script, ça vient peut-être de là.
+    start_ihm()
+    start_ihm_localisation()
+
     routines = [
         routine_audio_server,
         routine_sync_server,
