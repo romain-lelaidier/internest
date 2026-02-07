@@ -19,7 +19,7 @@ from birdnetlib.analyzer import Analyzer
 from birdnetlib import RecordingBuffer  # ça nous permet de ne pas passer par des wav temporaires.
 
 from esp import THEORETICAL_SAMPLE_RATE
-from ihm import notify_arrival, notify_departure
+from ihm_birdnet import notify_arrival, notify_departure
 
 BIRDNET_WINDOW_S = 5.0          # durée de la fenêtre d'analyse (secondes)
 BIRDNET_MIN_CONFIDENCE = 0.5    # seuil de confiance minimum

@@ -8,7 +8,7 @@ from utils import micros, add_padding_zeros
 from birdnet_loop import start_birdnet
 from localisation import routine_localiser
 
-from ihm import start_ihm   # Pour l'IHM birdnet
+from ihm_birdnet import start_ihm   # Pour l'IHM birdnet
 from ihm_localisation import start_ihm_localisation # Pour l'IHM localisation
 
 PORT_AUDIO = 8002           # port d'écoute UDP pour les paquets audio
