@@ -7,6 +7,8 @@ from esp import ESP
 from utils import micros, add_padding_zeros
 from localisation import routine_localiser
 from config import CONFIG
+from ihm_birdnet import start_ihm
+from ihm_localisation import start_ihm_localisation
 
 esps = {}
 
@@ -63,6 +65,11 @@ def routine_wrapper(func):
             print(err)
 
 if __name__ == "__main__":
+
+    # On lance les IHM qui lancent leurs propres threads daemon.
+    start_ihm()
+    start_ihm_localisation()
+
     routines = [
         routine_audio_server,
         routine_sync_server,

@@ -7,6 +7,9 @@ import os
 import csv
 import time
 
+# Pour pouvoir envoyer les positions à l'IHM en real time.
+from ihm_localisation import notify_position
+
 from utils import micros
 from config import CONFIG
 
@@ -292,6 +295,9 @@ def localiser(esps, t_start_vad, t_end_vad):
                 if pos is not None:
                     print(f"   🦜 Cri à T+{t_rel:.2f}s -> 📍 X={pos[0]:.1f} Y={pos[1]:.1f} Z={pos[2]:.1f}")
 
+                    # Pour l'afficher en temps réel sur l'IHM.
+                    notify_position(pos[0], pos[1], pos[2], cost, t_cri_us) # Ca va envoyer à l'IHM si il tourne les pos.
+                        
                     with open(OUTPUT_CSV, 'a', newline='') as f:
                         # On enregistre le temps précis du cri
                         csv.writer(f).writerow([t_cri_us, f"{pos[0]:.2f}", f"{pos[1]:.2f}", f"{pos[2]:.2f}", f"{cost:.2f}"])

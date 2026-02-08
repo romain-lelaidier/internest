@@ -18,8 +18,7 @@ from birdnetlib.analyzer import Analyzer
 from birdnetlib import RecordingBuffer  # ça nous permet de ne pas passer par des wav temporaires.
 
 from config import CONFIG
-from ihm import notify_arrival, notify_departure
-from config import CONFIG
+from ihm_birdnet import notify_arrival, notify_departure
 
 # Chargement du modèle BirdNET (une seule fois à l'import)
 print("Chargement du modele BirdNET...")
