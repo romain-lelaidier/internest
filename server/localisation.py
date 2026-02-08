@@ -8,62 +8,7 @@ import csv
 import time
 
 from utils import micros
-
-# ============================================================================
-# 1. TRACKING ET DÉTECTION (VAD)
-# ============================================================================
-
-class BirdTracker:
-    def __init__(self, max_v=15.0, time_threshold=5.0):
-        self.max_v = max_v
-        self.time_threshold = time_threshold
-        self.tracks = {}
-        self.next_id = 1
-        self.alpha = 0.6
-
-    def assign_id(self, pos_measured, t):
-        best_id = None
-        min_error = float('inf')
-
-        # Nettoyage des vieilles traces
-        to_delete = [tid for tid, data in self.tracks.items() if (t - data["time"]) > self.time_threshold]
-        for tid in to_delete:
-            del self.tracks[tid]
-
-        # Recherche de la trace la plus proche (prédiction de Kalman simplifiée)
-        for tid, data in self.tracks.items():
-            dt = t - data["time"]
-            # Prédiction de la position future
-            pos_pred = data["pos"] + data["vel"] * dt
-            
-            dist_pred = np.linalg.norm(pos_measured - pos_pred)
-            
-            # Rayon de manœuvre acceptable
-            maneuver_radius = 2.0 + (self.max_v * dt * 0.5)
-
-            if dist_pred < maneuver_radius and dist_pred < min_error:
-                min_error = dist_pred
-                best_id = tid
-
-        # Mise à jour ou Création
-        if best_id is not None:
-            data = self.tracks[best_id]
-            dt = t - data["time"]
-            if dt > 0:
-                new_vel = (pos_measured - data["pos"]) / dt
-                data["vel"] = data["vel"] * 0.4 + new_vel * 0.6 # Lissage vitesse
-            
-            # Lissage position (Moyenne mobile exponentielle)
-            pos_pred = data["pos"] + data["vel"] * dt
-            data["pos"] = pos_pred * (1 - self.alpha) + pos_measured * self.alpha
-            data["time"] = t
-            return best_id
-        else:
-            # Nouvel oiseau
-            new_id = self.next_id
-            self.tracks[new_id] = {"pos": pos_measured.copy(), "vel": np.zeros(3), "time": t}
-            self.next_id += 1
-            return new_id
+from config import CONFIG
 
 def detect_bird_segments(y, sr, f_min=800, n_sigma=3.0, min_duration=0.01):
     """ Détecte les zones d'activité dans le signal audio """
@@ -92,11 +37,6 @@ def detect_bird_segments(y, sr, f_min=800, n_sigma=3.0, min_duration=0.01):
             if (times[i] - start_t) > min_duration:
                 segments.append(start_t)
     return segments
-
-
-# ============================================================================
-# 2. MOTEUR TDOA (CORE ENGINE)
-# ============================================================================
 
 class TDOAEngine:
     def __init__(self, mic_positions, fs=48000, max_cost=40.0, v_sound=343.0,
@@ -246,9 +186,9 @@ class TDOAEngine:
 
         # Points de départ (Multi-Start)
         if self.use_multistart:
-             init_points = [[5,5,5], [2,2,2], [8,8,8], [2,8,5], [8,2,5]]
+            init_points = [[5,5,5], [2,2,2], [8,8,8], [2,8,5], [8,2,5]]
         else:
-             init_points = [[5.0, 5.0, 5.0]]
+            init_points = [[5.0, 5.0, 5.0]]
 
         for combo in combos:
             for init_pos in init_points:
@@ -274,12 +214,6 @@ class TDOAEngine:
 
 OUTPUT_CSV = "live_positions.csv"
 
-# Fréquence de calcul (On localise toutes les X secondes)
-COMPUTE_INTERVAL_US = 1.5 * 1e6   # 1.5 secondes
-WINDOW_SIZE_VAD_US = 2.0 * 1e6    # Fenêtre large pour la détection (2s)
-WINDOW_SIZE_TDOA_US = 0.3 * 1e6   # Fenêtre courte pour le TDOA (0.3s)
-BUFFER_DELAY_US = 0.5 * 1e6       # On regarde 1s en arrière (pour être sûr que les paquets sont arrivés)
-
 # Position des micros (ID -> [x, y, z])
 MIC_POSITIONS = {
     0: [0, 0, 0],
@@ -289,26 +223,21 @@ MIC_POSITIONS = {
     4: [10, 10, 10]
 }
 
-# ============================================================================
-# 2. INITIALISATION
-# ============================================================================
-
 # Init CSV
 if not os.path.exists(OUTPUT_CSV):
     with open(OUTPUT_CSV, 'w', newline='') as f:
         csv.writer(f).writerow(["RPI_Time_us", "X", "Y", "Z", "Cost"])
 
-# Init Moteur TDOA
 localizer = TDOAEngine(MIC_POSITIONS, fs=48000)
 
-def localiser(_esps, t_start_vad, t_end_vad):
+def localiser(esps, t_start_vad, t_end_vad):
     vad_signals = []
     mic_ids_map = [] # Pour garder le lien index -> mic_id
     # Extraction pour la VAD (Somme des énergies)
     # On a besoin d'un signal de référence temporel, prenons le premier micro valide
     ref_len = 0
 
-    for mac_addr, esp_obj in _esps.items():
+    for mac_addr, esp_obj in esps.items():
         # On extrait 2 secondes de signal
         _, _, sig = esp_obj.read_window(t_start_vad, t_end_vad)
 
@@ -325,11 +254,11 @@ def localiser(_esps, t_start_vad, t_end_vad):
     if len(vad_signals) > 0:
         # Somme des amplitudes absolues (Moyenne spatiale)
         sum_signal = np.sum(np.abs(np.array(vad_signals)), axis=0)
-            
+
         # On détecte les segments dans ces 2 secondes
         # detect_bird_segments renvoie des temps RELATIFS (ex: 0.5s depuis le début de la fenêtre)
         detections_relative = detect_bird_segments(sum_signal, sr=48000, n_sigma=3.0)
-            
+
         print(f"🔎 Analyse VAD (2s): {len(detections_relative)} cris potentiels.")
 
         # C. BOUCLE SUR CHAQUE CRI DÉTECTÉ
@@ -337,32 +266,32 @@ def localiser(_esps, t_start_vad, t_end_vad):
             # 1. Calcul de l'instant absolu du cri
             # t_start_vad est en microsecondes, t_rel est en secondes
             t_cri_us = t_start_vad + (t_rel * 1e6)
-                
+
             # 2. Définition de la petite fenêtre TDOA
             # On commence un peu avant le cri (-0.05s) pour avoir l'attaque
             t_start_tdoa = t_cri_us - (0.05 * 1e6) 
-            t_end_tdoa = t_start_tdoa + WINDOW_SIZE_TDOA_US
-                
+            t_end_tdoa = t_start_tdoa + CONFIG.WINDOW_SIZE_TDOA_US
+
             # 3. Extraction des fenetres pour le TDOA
             tdoa_signals_dict = {}
-                
-            for mac_addr, esp_obj in _esps.items():
+
+            for mac_addr, esp_obj in esps.items():
                 mic_id = esp_obj.id
                 # Extraction chirurgicale
                 _, _, sig_tdoa = esp_obj.read_window(t_start_tdoa, t_end_tdoa)
-                
+
                 if len(sig_tdoa) > 0 and not np.all(sig_tdoa == 0):
                     tdoa_signals_dict[mic_id] = sig_tdoa
-                
+
             print(tdoa_signals_dict)
             # 4. Localisation
             if len(tdoa_signals_dict) >= 4:
                 pos, cost = localizer.locate(tdoa_signals_dict)
                 print("output: ", pos, cost)
-                    
+
                 if pos is not None:
                     print(f"   🦜 Cri à T+{t_rel:.2f}s -> 📍 X={pos[0]:.1f} Y={pos[1]:.1f} Z={pos[2]:.1f}")
-                        
+
                     with open(OUTPUT_CSV, 'a', newline='') as f:
                         # On enregistre le temps précis du cri
                         csv.writer(f).writerow([t_cri_us, f"{pos[0]:.2f}", f"{pos[1]:.2f}", f"{pos[2]:.2f}", f"{cost:.2f}"])
@@ -370,8 +299,7 @@ def localiser(_esps, t_start_vad, t_end_vad):
 def routine_localiser(esps):
     while True:
         t = micros()
-        print(t)
-        target_t2 = t - BUFFER_DELAY_US
-        target_t1 = target_t2 - WINDOW_SIZE_VAD_US        
+        target_t2 = t - CONFIG.BUFFER_DELAY_US
+        target_t1 = target_t2 - CONFIG.WINDOW_SIZE_VAD_US        
         localiser(esps, target_t1, target_t2)  
-        time.sleep(COMPUTE_INTERVAL_US / 1e6)
+        time.sleep(CONFIG.COMPUTE_INTERVAL_US / 1e6)

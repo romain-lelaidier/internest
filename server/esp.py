@@ -1,10 +1,11 @@
 import numpy as np
 from scipy import signal
+import threading
 
-THEORETICAL_SAMPLE_RATE = 48000     # sample rate théorique des ESP
-MAX_WINDOW_S = 20                    # durée maximale d'enregistrement (au-delà, on oublie les paquets)
+from config import CONFIG
+from birdnet_loop import _esp_loop
 
-WINDOW_BUFFER_SIZE = MAX_WINDOW_S * THEORETICAL_SAMPLE_RATE
+WINDOW_BUFFER_SIZE = CONFIG.MAX_WINDOW_S * CONFIG.SAMPLE_RATE
 
 class ESP:
     def __init__(self, mac, id):
@@ -15,25 +16,34 @@ class ESP:
         self.t0 = None
         self.buffer_end_t = None
         self.last_written_index = 0
+        self.birdnet_thread = None
 
     def time_to_index(self, t):
-        return round((t - self.t0) * THEORETICAL_SAMPLE_RATE / 1e6)
+        return round((t - self.t0) * CONFIG.SAMPLE_RATE / 1e6)
     
     def index_to_time(self, i):
-        return self.t0 + i * 1e6 / THEORETICAL_SAMPLE_RATE
+        return self.t0 + i * 1e6 / CONFIG.SAMPLE_RATE
+    
+    def start_birdnet(self):
+        if self.birdnet_thread != None and self.birdnet_thread.is_alive():
+            return
+        self.birdnet_thread = threading.Thread(target=_esp_loop, args=(self.mac, self), daemon=True)
+        self.birdnet_thread.start()
+        print(f"Analyse BirdNET demarree pour {self.mac}")
 
     def receive_packet(self, t2, samples):
         # un paquet vient d'être reçu par le serveur UDP.
         # cette fonction l'interpole pour prendre en compte la fréquence d'échantillonnage effective.
 
         # calcul de la durée effective du paquet
-        default_duration = len(samples) * 1e6 / THEORETICAL_SAMPLE_RATE
+        default_duration = len(samples) * 1e6 / CONFIG.SAMPLE_RATE
 
         if self.t0 == None:
             # premier échantillon reçu
             t1 = t2 - default_duration
             interpolated_samples = samples
             self.t0 = t1
+            self.start_birdnet()
 
         elif self.buffer_end_t < t2 - default_duration * 1.1:
             # on fait l'hypothèse que la fréquence d'échantillonnage effective est égale à la théorique
@@ -45,7 +55,7 @@ class ESP:
             # les samples sont rééchantillonés à la fréquence d'échantillonnage théorique
             t1 = self.buffer_end_t
             effective_sample_rate = len(samples) * 1e6 / (t2 - t1)
-            n_interpolated_samples = int(len(samples) * THEORETICAL_SAMPLE_RATE / effective_sample_rate)
+            n_interpolated_samples = int(len(samples) * CONFIG.SAMPLE_RATE / effective_sample_rate)
             interpolated_samples = signal.resample(samples, n_interpolated_samples)
 
         write_at = self.time_to_index(t1)
