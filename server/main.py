@@ -77,10 +77,3 @@ if __name__ == "__main__":
 
     for routine in routines:
         threading.Thread(target=routine_wrapper, args=(routine,), daemon=True).start()
-
-    # garder le main thread en vie (les daemon threads meurent avec lui)
-    try:
-        while True:
-            threading.Event().wait(1)
-    except KeyboardInterrupt:
-        print("\nArret.")
