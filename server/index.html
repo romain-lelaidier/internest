@@ -100,6 +100,13 @@
                     }).join('');
                 }
 
+                // sync slider avec le serveur
+                const serverConf = Math.round(data.confidence * 100);
+                if (document.activeElement !== slider) {
+                    slider.value = serverConf;
+                    confVal.innerText = serverConf + '%';
+                }
+
                 // evenements
                 const evDiv = document.getElementById('events');
                 if (data.events.length === 0) {

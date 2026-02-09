@@ -74,6 +74,7 @@ def index():
 def api_status():
     return jsonify({
         'now': time.time(),
+        'confidence': CONFIG.BIRDNET_MIN_CONFIDENCE,
         'active': {
             mac: {sp: info for sp, info in species.items()}
             for mac, species in active_species.items()

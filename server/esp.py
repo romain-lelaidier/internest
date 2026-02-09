@@ -41,6 +41,7 @@ class ESP:
         print(self.buzzobjs)
     
     def start_birdnet(self):
+        print("Demarrage de l'analyse BirdNET pour ", self.mac)
         if self.birdnet_thread != None and self.birdnet_thread.is_alive():
             return
         self.birdnet_thread = threading.Thread(target=_esp_loop, args=(self.mac, self), daemon=True)
