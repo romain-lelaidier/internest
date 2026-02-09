@@ -1,6 +1,12 @@
 import numpy as np
+import scipy.fft
+import scipy.signal
 import socket
 import threading
+
+# Pré-initialiser scipy FFT sur le main thread pour éviter
+# "can't register atexit after shutdown" dans les threads
+scipy.fft.fft(np.zeros(256))
 
 from esp import ESP
 from utils import micros, add_padding_zeros
