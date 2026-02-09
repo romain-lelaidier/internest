@@ -10,9 +10,10 @@ from scipy.io.wavfile import write
 WINDOW_BUFFER_SIZE = CONFIG.MAX_WINDOW_S * CONFIG.SAMPLE_RATE
 
 class ESP:
-    def __init__(self, mac, id):
+    def __init__(self, mac, id, position):
         self.mac = mac
         self.id = id
+        self.position = np.array(position)
         self.buffer = np.zeros(WINDOW_BUFFER_SIZE, dtype=np.int16)
         self.silenced = np.zeros(WINDOW_BUFFER_SIZE, dtype=bool)
         self.birdnet_thread = None
@@ -98,7 +99,7 @@ class ESP:
 
         # write('test.wav', CONFIG.SAMPLE_RATE, np.int16(self.buffer / np.max(np.abs(self.buffer)) * 32767))
 
-    def read_window_esp(self, t1, t2):
+    def read_window(self, t1, t2):
         # retourne une fenêtre audio donnant l'intersection maximale entre t1 et t2
         # renvoie t1_reel, t2_reel, samples
 
@@ -121,12 +122,12 @@ class ESP:
         
         return int(t_r1), int(t_r2), np.concatenate((self.buffer[i_r1 % WINDOW_BUFFER_SIZE : WINDOW_BUFFER_SIZE], self.buffer[0 : i_r2 % WINDOW_BUFFER_SIZE]))
 
-    def t_to_te(self, t):
-        if self.synced:
-            return None
-        return t
+    # def t_to_te(self, t):
+    #     if self.synced:
+    #         return None
+    #     return t
 
-    def read_window(self, t1, t2):
-        if self.synced:
-            return self.read_window_esp(self.t_to_te(t1), self.t_to_te(t2))
-        return -1, -1, np.array([], dtype=np.int16)
+    # def read_window(self, t1, t2):
+    #     if self.synced:
+    #         return self.read_window_esp(self.t_to_te(t1), self.t_to_te(t2))
+    #     return -1, -1, np.array([], dtype=np.int16)

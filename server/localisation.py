@@ -42,10 +42,8 @@ def detect_bird_segments(y, sr, f_min=800, n_sigma=3.0, min_duration=0.01):
     return segments
 
 class TDOAEngine:
-    def __init__(self, mic_positions, fs=48000, max_cost=40.0, v_sound=343.0,
-                 use_parabolic=True, use_physical_filter=True, use_multistart=False, nb_pics=1):
+    def __init__(self, max_cost=40.0, v_sound=343.0, use_parabolic=True, use_physical_filter=True, use_multistart=False, nb_pics=1):
         
-        self.fs = fs
         self.max_cost = max_cost
         self.v_sound = v_sound
         self.use_parabolic = use_parabolic
@@ -54,15 +52,14 @@ class TDOAEngine:
         self.nb_pics = nb_pics
         
         # Gestion des positions micros (Dict ou Array)
-        self.mic_positions = mic_positions
-        if isinstance(mic_positions, dict):
-            self.sorted_ids = sorted(mic_positions.keys())
-            self.mics_array_full = np.array([mic_positions[i] for i in self.sorted_ids])
-            self.id_to_idx_map = {mid: i for i, mid in enumerate(self.sorted_ids)}
-        else:
-            self.mics_array_full = np.array(mic_positions)
-            self.sorted_ids = list(range(len(mic_positions)))
-            self.id_to_idx_map = {i: i for i in range(len(mic_positions))}
+        # if isinstance(mic_positions, dict):
+        #     self.sorted_ids = sorted(mic_positions.keys())
+        #     self.mics_array_full = np.array([mic_positions[i] for i in self.sorted_ids])
+        #     self.id_to_idx_map = {mid: i for i, mid in enumerate(self.sorted_ids)}
+        # else:
+        #     self.mics_array_full = np.array(mic_positions)
+        #     self.sorted_ids = list(range(len(mic_positions)))
+        #     self.id_to_idx_map = {i: i for i in range(len(mic_positions))}
 
     def _robust_cross_correlation(self, sig_target, sig_ref):
         """ EXACTEMENT comme ton code original """
@@ -71,7 +68,7 @@ class TDOAEngine:
         sig_ref = (sig_ref - np.mean(sig_ref)) / (np.std(sig_ref) + 1e-9)
         
         cc = signal.correlate(sig_target, sig_ref, mode='full')
-        lags = signal.correlation_lags(len(sig_target), len(sig_ref), mode='full') / self.fs
+        lags = signal.correlation_lags(len(sig_target), len(sig_ref), mode='full') / CONFIG.SAMPLE_RATE
         return cc, lags
 
     def _refine_peak_parabolic(self, cc, peak_idx, lags):
@@ -124,18 +121,18 @@ class TDOAEngine:
                 k += 1
         return residuals
 
-    def locate(self, signals_dict):
+    def locate(self, signals):
         """
-        Entrée : signals_dict {mic_id: numpy_array}
+        Entrée : signals [ (esp, signal) ]
         Sortie : (x,y,z), cost
         """
         # 1. Filtrage des micros valides
-        available_ids = [mid for mid in self.sorted_ids if mid in signals_dict and len(signals_dict[mid]) > 0]
-        if len(available_ids) < 4:
+        signals = filter(lambda _, signal: len(signal) > 0, signals)
+        if len(signals) < 4:
             return None, None
 
         # Positions des micros actifs pour ce calcul
-        active_mics_pos = np.array([self.mic_positions[mid] for mid in available_ids])
+        active_mics_pos = [ np.array([esp.position for esp, _ in signals]) ]
         candidats_delais = []
         
         # 2. Boucle sur les paires (Cross-Corr)
@@ -143,13 +140,13 @@ class TDOAEngine:
         # NOTE : Ton code original faisait ref vs les autres. Ici on fait "Full Mesh" ou "Sequential Pairs"
         # Pour coller à ton snippet `equations_tdoa`, il faut une liste linéaire de délais correspondant aux paires (0,1), (0,2)...(1,2)...
         
-        for i in range(len(available_ids) - 1):
-            for j in range(i + 1, len(available_ids)):
-                id_i = available_ids[i]
-                id_j = available_ids[j]
+        for i in range(len(signals) - 1):
+            for j in range(i + 1, len(signals)):
+                # id_i = available_macs[i]
+                # id_j = available_macs[j]
                 
                 # Cross-Corr
-                cc, lags = self._robust_cross_correlation(signals_dict[id_j], signals_dict[id_i])
+                cc, lags = self._robust_cross_correlation(signals[i][1], signals[j][1])
                 
                 # Masquage centre (bruit élec)
                 center_idx = len(cc) // 2
@@ -157,7 +154,7 @@ class TDOAEngine:
                 cc_masked[center_idx - 5 : center_idx + 5] = 0
                 
                 # Recherche pics
-                peaks, _ = signal.find_peaks(cc_masked, distance=int(self.fs * 0.0005))
+                peaks, _ = signal.find_peaks(cc_masked, distance=int(CONFIG.SAMPLE_RATE * 0.0005))
                 
                 delays_for_pair = []
                 if len(peaks) > 0:
@@ -167,8 +164,8 @@ class TDOAEngine:
                     for pidx in top_peaks:
                         d = self._refine_peak_parabolic(cc, pidx, lags)
                         # Check physique
-                        pos_i = np.array(self.mic_positions[id_i])
-                        pos_j = np.array(self.mic_positions[id_j])
+                        pos_i = signals[i][0].position
+                        pos_j = signals[i][0].position
                         if self._is_delay_physically_valid(d, pos_i, pos_j):
                             delays_for_pair.append(d)
                 
@@ -201,7 +198,7 @@ class TDOAEngine:
                         init_pos,
                         args=(active_mics_pos, combo),
                         bounds=([0, 0, 0], [15, 15, 15]), # Limites salle
-                        xtol=1e-3, 
+                        xtol=1e-3,
                         ftol=1e-3,
                         max_nfev=100
                     )
@@ -217,21 +214,12 @@ class TDOAEngine:
 
 OUTPUT_CSV = "live_positions.csv"
 
-# Position des micros (ID -> [x, y, z])
-MIC_POSITIONS = {
-    0: [0, 0, 0],
-    1: [10, 0, 0],
-    2: [0, 10, 0],
-    3: [0, 0, 10],
-    4: [10, 10, 10]
-}
-
 # Init CSV
 if not os.path.exists(OUTPUT_CSV):
     with open(OUTPUT_CSV, 'w', newline='') as f:
         csv.writer(f).writerow(["RPI_Time_us", "X", "Y", "Z", "Cost"])
 
-localizer = TDOAEngine(MIC_POSITIONS, fs=48000)
+tdoa_engine = TDOAEngine()
 
 def localiser(esps, t_start_vad, t_end_vad):
     vad_signals = []
@@ -279,17 +267,16 @@ def localiser(esps, t_start_vad, t_end_vad):
             tdoa_signals_dict = {}
 
             for mac_addr, esp_obj in esps.items():
-                mic_id = esp_obj.id
                 # Extraction chirurgicale
                 _, _, sig_tdoa = esp_obj.read_window(t_start_tdoa, t_end_tdoa)
 
                 if len(sig_tdoa) > 0 and not np.all(sig_tdoa == 0):
-                    tdoa_signals_dict[mic_id] = sig_tdoa
+                    tdoa_signals_dict[mac_addr] = sig_tdoa
 
             print(tdoa_signals_dict)
             # 4. Localisation
             if len(tdoa_signals_dict) >= 4:
-                pos, cost = localizer.locate(tdoa_signals_dict)
+                pos, cost = tdoa_engine.locate(tdoa_signals_dict)
                 print("output: ", pos, cost)
 
                 if pos is not None:

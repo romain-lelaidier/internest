@@ -19,6 +19,13 @@ from ihm_localisation import start_ihm_localisation
 # from esp_controller import ESPController
 
 esps = {}
+esps_positions = {
+    "1c:db:d4:34:79:6c": [ 0, 0, 0],        # vert
+    "1c:db:d4:38:43:00": [ 0, 5, 0 ],       # rouge
+    "1c:db:d4:36:6f:5c": [ 7, 0, 0 ],       # jaune avec buzzer
+    "1c:db:d4:34:5c:04": [ 5, 6, 2.3 ],     # bleu
+    "1c:db:d4:33:6a:78": [ ],               # jaune sans buzzer
+}
 
 def handle_request(message):
     mac = ':'.join(list(map(lambda c: add_padding_zeros(hex(c)[2:], 2), message[0 : CONFIG.ESP_ID_LENGTH])))
@@ -26,8 +33,8 @@ def handle_request(message):
     payload = message[CONFIG.ESP_ID_LENGTH + 1 :]
 
     if mac not in esps:
-        esps[mac] = ESP(mac, len(esps))
-        print(f"new ESP: {mac}")
+        esps[mac] = ESP(mac, len(esps), esps_positions[mac])
+        print(f"new ESP: {mac} {esps[mac].position}")
 
     if code == 0:
         esps[mac].init_window()
