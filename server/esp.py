@@ -17,6 +17,7 @@ class ESP:
         self.buffer_end_t = None
         self.last_written_index = 0
         self.birdnet_thread = None
+        self.coordinates = None # en théorie il faut que ce soit une liste [x,y,z]
 
     def time_to_index(self, t):
         return round((t - self.t0) * CONFIG.SAMPLE_RATE / 1e6)

@@ -5,8 +5,8 @@ Serveur Flask sur le port 8009 avec un plot Plotly.js 3D.
 Les positions sont alimentées par localisation.py via notify_position().
 
 Usage depuis main.py :
-    from ihm_localisation import start_ihm_localisation, set_mic_positions
-    set_mic_positions(MIC_POSITIONS)
+    from ihm_localisation import start_ihm_localisation, set_esps
+    set_esps(esps)
     start_ihm_localisation()
 
 Usage depuis localisation.py :
@@ -26,13 +26,13 @@ IHM_LOC_PORT = 8009
 
 # État partagé
 positions = []      # [{ x, y, z, cost, time }]
-mic_positions = {}  # { id: [x, y, z] }
+_esps = {}          # référence vers le dict esps de main.py
 
 
-def set_mic_positions(mics):
-    """Enregistre les positions des micros pour l'affichage."""
-    global mic_positions
-    mic_positions = {str(k): v for k, v in mics.items()}
+def set_esps(esps):
+    """Enregistre la référence vers le dict esps pour lire les coordonnées."""
+    global _esps
+    _esps = esps
 
 
 def notify_position(x, y, z, cost, t):
@@ -54,8 +54,13 @@ def index():
 @app.route('/api/positions')
 def api_positions():
     offset = int(request.args.get('offset', 0))
+    # construire les positions micros dynamiquement depuis les ESP
+    mics = {}
+    for mac, esp in _esps.items():
+        if esp.coordinates is not None:
+            mics[mac] = esp.coordinates
     return jsonify({
-        'mics': mic_positions,
+        'mics': mics,
         'positions': positions[offset:],
         'total': len(positions)
     })
@@ -104,10 +109,10 @@ HTML = """<!DOCTYPE html>
 
     <script>
     let offset = 0;
-    let micsInitialized = false;
+    let nbMics = 0;
 
-    // trace 0 : micros (ajouté dynamiquement au premier fetch)
-    // trace 1 : positions estimées
+    // trace 0 : positions estimées
+    // trace 1 : micros (ESP) — mis à jour dynamiquement
     const traceBird = {
         x: [], y: [], z: [],
         mode: 'markers',
@@ -126,6 +131,17 @@ HTML = """<!DOCTYPE html>
         name: 'Positions'
     };
 
+    const traceMicros = {
+        x: [], y: [], z: [],
+        mode: 'markers+text',
+        type: 'scatter3d',
+        marker: { color: '#f87171', size: 5, symbol: 'diamond' },
+        text: [],
+        textposition: 'top center',
+        textfont: { size: 10, color: '#f87171' },
+        name: 'ESPs'
+    };
+
     const layout = {
         scene: {
             xaxis: { range: [0, 15], title: 'X (m)' },
@@ -141,40 +157,33 @@ HTML = """<!DOCTYPE html>
         legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(22,33,62,0.8)' }
     };
 
-    Plotly.newPlot('chart', [traceBird], layout);
+    // trace 0 = positions, trace 1 = micros
+    Plotly.newPlot('chart', [traceBird, traceMicros], layout);
 
-    function initMics(mics) {
-        const ids = Object.keys(mics);
-        if (ids.length === 0) return;
+    function updateMics(mics) {
+        const macs = Object.keys(mics);
+        if (macs.length === nbMics) return;
+        nbMics = macs.length;
 
-        const traceMicros = {
-            x: ids.map(id => mics[id][0]),
-            y: ids.map(id => mics[id][1]),
-            z: ids.map(id => mics[id][2]),
-            mode: 'markers+text',
-            type: 'scatter3d',
-            marker: { color: '#f87171', size: 5, symbol: 'diamond' },
-            text: ids.map(id => 'M' + id),
-            textposition: 'top center',
-            textfont: { size: 10, color: '#f87171' },
-            name: 'Micros'
-        };
-
-        Plotly.addTraces('chart', traceMicros);
-        micsInitialized = true;
+        Plotly.restyle('chart', {
+            x: [macs.map(mac => mics[mac][0])],
+            y: [macs.map(mac => mics[mac][1])],
+            z: [macs.map(mac => mics[mac][2])],
+            text: [macs]
+        }, [1]);
     }
 
     function refresh() {
         fetch('/api/positions?offset=' + offset)
             .then(r => r.json())
             .then(data => {
-                // init micros une seule fois
-                if (!micsInitialized) initMics(data.mics);
+                // mettre à jour les micros si nouveaux ESP
+                updateMics(data.mics);
 
                 const pts = data.positions;
                 if (pts.length === 0) return;
 
-                // temps relatif pour la colorbar (depuis le premier point)
+                // temps relatif pour la colorbar
                 const t0 = (positions_t0 !== null) ? positions_t0 : pts[0].time;
                 if (positions_t0 === null) positions_t0 = t0;
 
@@ -187,7 +196,6 @@ HTML = """<!DOCTYPE html>
 
                 offset = data.total;
 
-                // mise a jour status
                 const last = pts[pts.length - 1];
                 document.getElementById('nb-points').innerText = data.total;
                 document.getElementById('last-pos').innerText =
@@ -207,15 +215,17 @@ HTML = """<!DOCTYPE html>
 
 if __name__ == '__main__':
     import math
+    from types import SimpleNamespace
 
-    # positions micros fictives
-    set_mic_positions({
-        0: [0, 0, 0],
-        1: [10, 0, 0],
-        2: [0, 10, 0],
-        3: [0, 0, 10],
-        4: [10, 10, 10]
-    })
+    # simuler des ESP avec coordonnées
+    fake_esps = {}
+    coords = [[0,0,0], [10,0,0], [0,10,0], [0,0,10], [10,10,10]]
+    for i, c in enumerate(coords):
+        mac = f"aa:bb:cc:dd:ee:{i:02d}"
+        esp = SimpleNamespace(coordinates=c, mac=mac, id=i)
+        fake_esps[mac] = esp
+
+    set_esps(fake_esps)
 
     # simuler des positions en spirale
     t0 = time.time() * 1e6
