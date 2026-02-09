@@ -12,12 +12,17 @@ class CONFIG:
     SAMPLE_RATE = 48000             # sample rate théorique des ESP
     MAX_WINDOW_S = 20               # durée maximale d'enregistrement (au-delà, on oublie les paquets)
 
-    # BIRDNET_LOOP
+    # BIRDNET_LOOP (loop 1 : analyse continue, fenêtres courtes)
     BIRDNET_WINDOW_S = 5.0          # durée de la fenêtre d'analyse (secondes)
     BIRDNET_MIN_CONFIDENCE = 0.5    # seuil de confiance minimum
     SPECIES_TIMEOUT_S = 30.0        # durée sans détection → départ
     POLL_INTERVAL_S = 0.5           # fréquence de vérification du buffer
     AFFICHAGE_IHM = True            # si False, on ne notifie pas l'IHM
+
+    # BIRDNET_LOOP_2 (loop 2 : analyse sur activité, fenêtres longues)
+    BIRDNET_WINDOW_2_S = 30.0       # fenêtre d'analyse longue (secondes)
+    BIRDNET_MIN_CONFIDENCE_2 = 0.3  # seuil de confiance (plus bas car fenêtre plus longue)
+    ACTIVITY_RMS_THRESHOLD = 300    # seuil RMS int16 pour considérer qu'il y a de l'activité
 
     # LOCALIZATION LOOP
     COMPUTE_INTERVAL_US = 1.5 * 1e6   # 1.5 secondes
