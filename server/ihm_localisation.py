@@ -27,6 +27,7 @@ IHM_LOC_PORT = 8009
 # État partagé
 positions = []      # [{ x, y, z, cost, time }]
 _esps = {}          # référence vers le dict esps de main.py
+debug_log = []      # journal de debug (derniers événements)
 
 
 def set_esps(esps):
@@ -42,6 +43,14 @@ def notify_position(x, y, z, cost, t):
         'cost': float(cost),
         'time': float(t)
     })
+    _debug(f"Position: [{x:.2f}, {y:.2f}, {z:.2f}] cost={cost:.2f}")
+
+
+def _debug(msg):
+    """Ajoute un message au journal de debug."""
+    debug_log.append({'time': time.time(), 'msg': msg})
+    if len(debug_log) > 200:
+        debug_log.pop(0)
 
 
 # --- Routes ---
@@ -63,6 +72,26 @@ def api_positions():
         'mics': mics,
         'positions': positions[offset:],
         'total': len(positions)
+    })
+
+
+@app.route('/api/debug')
+def api_debug():
+    esps_info = []
+    for mac, esp in _esps.items():
+        coords = None
+        if hasattr(esp, 'coordinates') and esp.coordinates is not None:
+            coords = list(esp.coordinates) if hasattr(esp.coordinates, '__iter__') else esp.coordinates
+        esps_info.append({
+            'mac': mac,
+            'coordinates': coords,
+            'has_data': esp.buffer_end_t is not None if hasattr(esp, 'buffer_end_t') else False
+        })
+    return jsonify({
+        'nb_esps_registered': len(_esps),
+        'esps': esps_info,
+        'nb_positions': len(positions),
+        'log': debug_log[-50:]
     })
 
 
@@ -95,6 +124,15 @@ HTML = """<!DOCTYPE html>
         #status h2 { margin: 0 0 8px 0; color: #00d4aa; font-size: 16px; }
         #status p { margin: 4px 0; font-size: 13px; }
         .val { color: #00d4aa; }
+        #debug-panel {
+            position: absolute; bottom: 10px; left: 10px;
+            background: rgba(22, 33, 62, 0.9); padding: 12px 16px;
+            border-radius: 8px; z-index: 100; max-width: 500px; max-height: 300px; overflow-y: auto;
+        }
+        #debug-panel h3 { margin: 0 0 6px 0; color: #f87171; font-size: 14px; }
+        .debug-esp { color: #7b8cde; font-size: 12px; margin: 2px 0; }
+        .debug-log-entry { color: #888; font-size: 11px; margin: 1px 0; }
+        .debug-log-entry .dmsg { color: #ccc; }
     </style>
 </head>
 <body>
@@ -103,6 +141,12 @@ HTML = """<!DOCTYPE html>
         <h2>InterNest - Localisation 3D</h2>
         <p>Points: <span class="val" id="nb-points">0</span></p>
         <p>Derniere position: <span class="val" id="last-pos">-</span></p>
+    </div>
+
+    <div id="debug-panel">
+        <h3>Debug</h3>
+        <div id="debug-esps"></div>
+        <div id="debug-log"></div>
     </div>
 
     <div id="chart"></div>
@@ -206,8 +250,35 @@ HTML = """<!DOCTYPE html>
 
     let positions_t0 = null;
 
+    function refreshDebug() {
+        fetch('/api/debug')
+            .then(r => r.json())
+            .then(data => {
+                const espsDiv = document.getElementById('debug-esps');
+                if (data.esps.length === 0) {
+                    espsDiv.innerHTML = '<div class="debug-esp">Aucun ESP enregistre</div>';
+                } else {
+                    espsDiv.innerHTML = data.esps.map(e => {
+                        const coords = e.coordinates ? '[' + e.coordinates.join(', ') + ']' : 'null';
+                        const status = e.has_data ? '●' : '○';
+                        return '<div class="debug-esp">' + status + ' ' + e.mac + ' ' + coords + '</div>';
+                    }).join('');
+                }
+
+                const logDiv = document.getElementById('debug-log');
+                const entries = data.log.slice(-20);
+                logDiv.innerHTML = entries.map(e => {
+                    const d = new Date(e.time * 1000);
+                    const ts = d.toLocaleTimeString();
+                    return '<div class="debug-log-entry"><span>' + ts + '</span> <span class="dmsg">' + e.msg + '</span></div>';
+                }).join('');
+            });
+    }
+
     refresh();
     setInterval(refresh, 1000);
+    refreshDebug();
+    setInterval(refreshDebug, 2000);
     </script>
 </body>
 </html>"""
