@@ -11,7 +11,7 @@ from utils import micros, add_padding_zeros
 from localisation import routine_localiser
 from config import CONFIG
 from ihm_birdnet import start_ihm
-from ihm_localisation import start_ihm_localisation
+from ihm_localisation import start_ihm_localisation, set_esps
 
 # Imports pour la calibration (ceux qu'on a créés précédemment)
 # from calibration import run_step_by_step_calibration, POSITIONS_FILE
@@ -106,8 +106,9 @@ def routine_wrapper(func):
 if __name__ == "__main__":
 
     # On lance les IHM qui lancent leurs propres threads daemon.
-    # start_ihm()
-    # start_ihm_localisation()
+    start_ihm()
+    set_esps(esps)
+    start_ihm_localisation()
 
     routines = [
         routine_audio_server,

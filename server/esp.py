@@ -26,7 +26,7 @@ class ESP:
         self.last_written_index = 0
         self.buzzobjs = []
         self.synced = False
-        self.coordinates = None
+        self.coordinates = self.position if len(self.position) > 0 else None
 
     def time_to_index(self, t):
         return round((t - self.t0) * CONFIG.SAMPLE_RATE / 1e6)
