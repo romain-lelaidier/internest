@@ -1,6 +1,5 @@
 import numpy as np
 import socket
-import asyncio
 import threading
 
 from esp import ESP
@@ -12,7 +11,7 @@ from ihm_localisation import start_ihm_localisation
 
 esps = {}
 
-async def use_packet(mac, esp_time, samples, rpi_time):
+def use_packet(mac, esp_time, samples, rpi_time):
     global esps
     if mac not in esps:
         esps[mac] = ESP(mac, len(esps))
@@ -38,7 +37,7 @@ def routine_audio_server(_):
             samples = np.frombuffer(message[CONFIG.ESP_ID_LENGTH + CONFIG.ESP_TIME_LENGTH : ], dtype='<i2')
 
             # analyse
-            asyncio.run(use_packet(mac, esp_time, samples, rpi_time))
+            use_packet(mac, esp_time, samples, rpi_time)
 
 def routine_sync_server(_):
 
