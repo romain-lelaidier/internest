@@ -16,9 +16,11 @@ Debug standalone :
 """
 
 import time
+import io
+import csv
 import threading
 from collections import deque
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request, Response
 
 from config import CONFIG
 
@@ -78,6 +80,41 @@ def api_status():
         },
         'events': list(events)[:30]
     })
+
+@app.route('/api/set_confidence', methods=['POST'])
+def api_set_confidence():
+    data = request.get_json()
+    val = float(data.get('value', CONFIG.BIRDNET_MIN_CONFIDENCE))
+    CONFIG.BIRDNET_MIN_CONFIDENCE = val
+    print(f"Seuil BirdNET mis a jour: {val}")
+    return jsonify({'ok': True, 'value': val})
+
+
+@app.route('/api/clear_events', methods=['POST'])
+def api_clear_events():
+    events.clear()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/export_csv')
+def api_export_csv():
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['timestamp', 'type', 'mac', 'species', 'confidence'])
+    for ev in events:
+        writer.writerow([
+            ev.get('time', ''),
+            ev.get('type', ''),
+            ev.get('mac', ''),
+            ev.get('species', ''),
+            ev.get('confidence', '')
+        ])
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=detections.csv'}
+    )
+
 
 def start_ihm():
     """Lance le serveur Flask dans un thread daemon."""
