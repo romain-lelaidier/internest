@@ -18,7 +18,7 @@ from birdnetlib.analyzer import Analyzer
 from birdnetlib import RecordingBuffer  # ça nous permet de ne pas passer par des wav temporaires.
 
 from config import CONFIG
-from ihm_birdnet import notify_arrival, notify_departure
+from ihm_birdnet import notify_esp, notify_arrival, notify_departure
 
 # Chargement du modèle BirdNET (une seule fois à l'import)
 print("Chargement du modele BirdNET...")
@@ -27,6 +27,8 @@ print("Modele BirdNET chargé.")
 
 def _esp_loop(mac, esp):
     """Boucle d'analyse BirdNET dédiée à un ESP."""
+    if CONFIG.AFFICHAGE_IHM:
+        notify_esp(mac)
     active_species = {}     # species_name -> last_seen (time.time())
     last_analyzed_t = None  # fin de la dernière fenêtre analysée (µs, timeline ESP)
 

@@ -28,6 +28,12 @@ app = Flask(__name__)
 active_species = {}   # { mac: { species_name: { confidence, last_seen } } }
 events = deque(maxlen=100)
 
+def notify_esp(mac):
+    """Appelé quand un ESP se connecte, pour qu'il apparaisse dans l'IHM même sans détection."""
+    if mac not in active_species:
+        active_species[mac] = {}
+
+
 def notify_arrival(mac, species, confidence):
     """Appelé par birdnet_loop quand une espèce arrive."""
     if mac not in active_species:
