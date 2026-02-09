@@ -13,6 +13,11 @@ from config import CONFIG
 from ihm_birdnet import start_ihm
 from ihm_localisation import start_ihm_localisation
 
+# Imports pour la calibration (ceux qu'on a créés précédemment)
+# from calibration import run_step_by_step_calibration, POSITIONS_FILE
+# On importe le contrôleur pour pouvoir envoyer les commandes de buzz pendant la calib
+# from esp_controller import ESPController
+
 esps = {}
 
 def handle_request(message):
@@ -91,7 +96,7 @@ def routine_wrapper(func):
         except Exception as err:
             print(err)
 
-if __name__ == "__main__":                         
+if __name__ == "__main__":
 
     # On lance les IHM qui lancent leurs propres threads daemon.
     # start_ihm()
@@ -101,7 +106,8 @@ if __name__ == "__main__":
         routine_audio_server,
         routine_sync_server,
         routine_localiser,
-        routine_buzz_server
+        # routine_buzz_server,
+        # run_step_by_step_calibration
     ]
 
     for routine in routines:
