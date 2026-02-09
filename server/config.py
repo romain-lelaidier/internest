@@ -2,6 +2,7 @@ class CONFIG:
     # GENERAL
     PORT_AUDIO = 8002               # port d'écoute UDP pour les paquets audio
     PORT_SYNC = 8001                # port d'écoute UDP pour les paquets audio
+    PORT_BUZZER = 8003              # port d'écoute UDP pour les paquets audio
     PORT_IHM = 8008                 # port d'écoute HTTP pour l'affichage web
 
     # ESPS
