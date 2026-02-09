@@ -3,6 +3,7 @@ import scipy.fft
 import scipy.signal
 import socket
 import threading
+import time
 
 # Pré-initialiser scipy FFT sur le main thread pour éviter
 # "can't register atexit after shutdown" dans les threads
@@ -83,3 +84,6 @@ if __name__ == "__main__":
 
     for routine in routines:
         threading.Thread(target=routine_wrapper, args=(routine,), daemon=True).start()
+
+    while True:
+        time.sleep(100)
