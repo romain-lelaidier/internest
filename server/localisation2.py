@@ -117,26 +117,28 @@ def localiser(esps, t1, t2):
 
     # reading every esp's latest data and computing spectrogram
     for mac, esp in esps.items():
-        positions[mac] = esp.position
+        try:
+            t1r, t2r, s = esp.read_window(t1, t2)
+            # print("READING", t1r, t2r)
+            f, t, Sxx = signal.spectrogram(s, CONFIG.SAMPLE_RATE, nperseg=100, nfft=200) # f, t, Sxx
+            positions[mac] = esp.position
+            samples[mac] = s
 
-        t1r, t2r, s = esp.read_window(t1, t2)
-        # print("READING", t1r, t2r)
-        samples[mac] = s
-        f, t, Sxx = signal.spectrogram(s, CONFIG.SAMPLE_RATE, nperseg=100, nfft=200) # f, t, Sxx
-
-        # threshold filtering
-        i = Sxx > Sxx.max() / 20                                # keeping only high-energy values
-        i = i & np.repeat([f > 800], len(t), axis=0).T          # keeping only frequencies above 800 Hz
-        # building boxes
-        ii = expand_and_filter_true_regions(i, min_size=20)     # aggregating those values and removing the only ones
-        labeled_array, num_features = ndimage.label(ii)
-        boxes[mac] = []
-        for i in range(num_features):
-            iii = labeled_array == i+1
-            # retrieving box boundaries
-            true_indices = np.where(iii)
-            x_min, x_max, y_min, y_max = np.min(true_indices[1]), np.max(true_indices[1]), np.min(true_indices[0]), np.max(true_indices[0])
-            boxes[mac].append((t[x_min], t[x_max], f[y_min], f[y_max]))
+            # threshold filtering
+            i = Sxx > Sxx.max() / 20                                # keeping only high-energy values
+            i = i & np.repeat([f > 800], len(t), axis=0).T          # keeping only frequencies above 800 Hz
+            # building boxes
+            ii = expand_and_filter_true_regions(i, min_size=20)     # aggregating those values and removing the only ones
+            labeled_array, num_features = ndimage.label(ii)
+            boxes[mac] = []
+            for i in range(num_features):
+                iii = labeled_array == i+1
+                # retrieving box boundaries
+                true_indices = np.where(iii)
+                x_min, x_max, y_min, y_max = np.min(true_indices[1]), np.max(true_indices[1]), np.min(true_indices[0]), np.max(true_indices[0])
+                boxes[mac].append((t[x_min], t[x_max], f[y_min], f[y_max]))
+        except:
+            continue
 
     # aggregating boxes from all spectrograms together
     agg_boxes = aggregate_boxes(boxes)
