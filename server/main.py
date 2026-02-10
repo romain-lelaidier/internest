@@ -23,14 +23,23 @@ esps_positions = {
     "1c:db:d4:34:79:6c": [ 0, 0, 0],        # vert
     "1c:db:d4:38:43:00": [ 0, 5, 0 ],       # rouge
     "1c:db:d4:36:6f:5c": [ 7, 0, 0 ],       # jaune avec buzzer
-    "1c:db:d4:34:5c:04": [ 5, 6, 2.3 ],     # bleu
-    "1c:db:d4:33:6a:78": [ ],               # jaune sans buzzer
+    "1c:db:d4:34:5c:04": [ 6, 5, 2.3 ],     # bleu
+    "1c:db:d4:33:6a:78": [ 4, 3, 1 ],       # jaune sans buzzer
 }
+
+def routine_info(esps):
+    printer = ""
+    t = micros()
+    for mac, esp in esps.items():
+        t1r, t2r, s = esp.read_window(t - CONFIG.BIRDNET_WINDOW_S, t - CONFIG.BUFFER_DELAY_US)
+        p = (s != 0).sum() / ((t2r - t1r) * CONFIG.SAMPLE_RATE * 1e6)
+        printer += f"{mac} = {round(p*100)}%  -  "
+    print(printer)
+    time.sleep(1)
 
 def handle_request(message):
     mac = ':'.join(list(map(lambda c: add_padding_zeros(hex(c)[2:], 2), message[0 : CONFIG.ESP_ID_LENGTH])))
     code = message[CONFIG.ESP_ID_LENGTH]
-    payload = message[CONFIG.ESP_ID_LENGTH + 1 :]
 
     if mac not in esps:
         esps[mac] = ESP(mac, len(esps), esps_positions[mac])
@@ -41,8 +50,9 @@ def handle_request(message):
         print(f"esp {mac} initalized")
         return esps[mac].frequency.to_bytes(8, 'little')
 
+    payload = message[CONFIG.ESP_ID_LENGTH + 1 :]
     esp_time = int.from_bytes(payload[0 : CONFIG.ESP_TIME_LENGTH], 'little')
-    print(code, mac, esp_time, len(payload))
+    # print(code, mac, esp_time, len(payload))
 
     if code == 1:
         f = int.from_bytes(payload[CONFIG.ESP_TIME_LENGTH : CONFIG.ESP_TIME_LENGTH + 8], 'little')
@@ -106,9 +116,9 @@ def routine_wrapper(func):
 if __name__ == "__main__":
 
     # On lance les IHM qui lancent leurs propres threads daemon.
-    start_ihm()
-    set_esps(esps)
-    start_ihm_localisation()
+    # start_ihm()
+    # set_esps(esps)
+    # start_ihm_localisation()
 
     routines = [
         routine_audio_server,

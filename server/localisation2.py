@@ -110,6 +110,7 @@ def multilateration_residual(source, mic_positions, distance_differences):
 nth = 0
 
 def localiser(esps, t1, t2):
+    global nth
     samples = {}
     boxes = {}
     positions = {}
@@ -119,7 +120,7 @@ def localiser(esps, t1, t2):
         positions[mac] = esp.position
 
         t1r, t2r, s = esp.read_window(t1, t2)
-        print("READING", t1r, t2r)
+        # print("READING", t1r, t2r)
         samples[mac] = s
         f, t, Sxx = signal.spectrogram(s, CONFIG.SAMPLE_RATE, nperseg=100, nfft=200) # f, t, Sxx
 
@@ -150,6 +151,7 @@ def localiser(esps, t1, t2):
         tdoas = []
         sie_max = 0
         sie_max_si = None
+        t = np.linspace(box[0], box[1], len(si))
         for i, (maci, si) in enumerate(samples.items()):
             for j, (macj, sj) in enumerate(samples.items()):
                 if i >= j: continue
@@ -172,7 +174,7 @@ def localiser(esps, t1, t2):
         )
         estimated_sound_origin = result.x
         print(f"saving {nth}")
-        write(f"{nth}.wav", CONFIG.SAMPLE_RATE, np.int16(sie_max_si / np.max(np.abs(sie_max_si)) * 32767))
+        write(f"./out/{nth}.wav", CONFIG.SAMPLE_RATE, np.int16(sie_max_si / np.max(np.abs(sie_max_si)) * 32767))
         nth += 1
         sound_guesses.append((estimated_sound_origin, box))
 
