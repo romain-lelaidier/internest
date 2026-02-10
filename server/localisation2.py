@@ -151,7 +151,6 @@ def localiser(esps, t1, t2):
         tdoas = []
         sie_max = 0
         sie_max_si = None
-        t = np.linspace(box[0], box[1], len(si))
         for i, (maci, si) in enumerate(samples.items()):
             for j, (macj, sj) in enumerate(samples.items()):
                 if i >= j: continue
@@ -161,6 +160,7 @@ def localiser(esps, t1, t2):
                 if np.abs(tdoa) > 1.2 * np.linalg.norm(esps[maci].position - esps[macj].position): continue
                 tdoas.append((maci, macj, tdoa))
             
+            t = np.linspace(box[0], box[1], len(si))
             sie = np.trapz(np.abs(si)**2, t) / len(si)
             if sie > sie_max:
                 sie_max = sie
