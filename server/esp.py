@@ -43,11 +43,11 @@ class ESP:
     
     def start_birdnet(self):
         print("Demarrage de l'analyse BirdNET pour ", self.mac)
-        if self.birdnet_thread != None and self.birdnet_thread.is_alive():
-            return
-        self.birdnet_thread = threading.Thread(target=_esp_loop, args=(self.mac, self), daemon=True)
-        self.birdnet_thread.start()
-        print(f"Analyse BirdNET demarree pour {self.mac}")
+        # if self.birdnet_thread != None and self.birdnet_thread.is_alive():
+        #     return
+        # self.birdnet_thread = threading.Thread(target=_esp_loop, args=(self.mac, self), daemon=True)
+        # self.birdnet_thread.start()
+        # print(f"Analyse BirdNET demarree pour {self.mac}")
 
     def try_assign_buzz(self, samples, t1, t2):
         return
