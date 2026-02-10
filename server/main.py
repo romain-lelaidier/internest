@@ -11,8 +11,8 @@ from esp import ESP
 from utils import micros, add_padding_zeros
 from postproc import routine_postproc
 from config import CONFIG
-from ihm_birdnet import start_ihm
-from ihm_localisation import start_ihm_localisation, set_esps
+# from ihm_birdnet import start_ihm
+# from ihm_localisation import start_ihm_localisation, set_esps
 
 # Imports pour la calibration (ceux qu'on a créés précédemment)
 # from calibration import run_step_by_step_calibration, POSITIONS_FILE
@@ -126,7 +126,7 @@ if __name__ == "__main__":
     routines = [
         routine_audio_server,
         routine_sync_server,
-        routine_localiser,
+        routine_postproc,
         routine_info
         # routine_buzz_server,
         # run_step_by_step_calibration

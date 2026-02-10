@@ -185,7 +185,7 @@ def routine_postproc(esps):
         try:
             samples = localiser(esps, target_t1, target_t2)
             for sample in samples:
-                print(f" ! DETECTION ! {sample.n} (origin: {sample.origin})")
+                sample.analyze()
 
         finally:
             time.sleep(CONFIG.COMPUTE_INTERVAL_US / 1e6)
