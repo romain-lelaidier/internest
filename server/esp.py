@@ -1,11 +1,7 @@
 import numpy as np
 from scipy import signal
-import threading
 
 from config import CONFIG
-from birdnet_loop import _esp_loop
-from utils import micros
-from scipy.io.wavfile import write
 
 WINDOW_BUFFER_SIZE = CONFIG.MAX_WINDOW_S * CONFIG.SAMPLE_RATE
 

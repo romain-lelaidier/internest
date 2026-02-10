@@ -53,7 +53,6 @@ def handle_request(message):
 
     payload = message[CONFIG.ESP_ID_LENGTH + 1 :]
     esp_time = int.from_bytes(payload[0 : CONFIG.ESP_TIME_LENGTH], 'little')
-    # print(code, mac, esp_time, len(payload))
 
     if code == 1:
         f = int.from_bytes(payload[CONFIG.ESP_TIME_LENGTH : CONFIG.ESP_TIME_LENGTH + 8], 'little')
@@ -71,18 +70,6 @@ def handle_client(client_socket):
         rtmsg = handle_request(request)
         if rtmsg:
             client_socket.send(rtmsg)
-
-def routine_buzz_server(_):
-    global esps
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_socket.bind(('', CONFIG.PORT_BUZZER))
-    server_socket.listen(10)
-    while True: 
-        client, addr = server_socket.accept()
-        print(f"[TCP] Accepted connection from: {addr[0]}:{addr[1]}")
-        client_handler = threading.Thread(target=handle_client, args=(client,))
-        client_handler.start()
 
 def routine_audio_server(_):
     global esps
@@ -127,9 +114,7 @@ if __name__ == "__main__":
         routine_audio_server,
         routine_sync_server,
         routine_postproc,
-        routine_info
-        # routine_buzz_server,
-        # run_step_by_step_calibration
+        routine_info,
     ]
 
     for routine in routines:

@@ -29,12 +29,12 @@ class Sample:
         )
         # print(f"[L2] Analyse BirdNET pour {mac} ({len(samples)} samples, {CONFIG.BIRDNET_WINDOW_2_S}s)")
         recording.analyze()
-        
+
         print(f" ! DETECTION ! {self.n} (origin: {self.origin})")
 
         for det in recording.detections:
             species = det['common_name']
-            print(species)
+            print(det)
             # is_new = species not in active_species
             # if is_new:
             #     print(f"[L2] >>> {species} sur {mac} (conf {det['confidence']:.2f})")
