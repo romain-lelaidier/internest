@@ -53,7 +53,7 @@ def aggregate_boxes(boxes):
         for j in range(n_boxes):
             overlap_matrix[i, j] = compute_iou(all_boxes[i], all_boxes[j])
     distance_matrix = 1 - overlap_matrix
-    clustering = DBSCAN(eps=0.99, min_samples=1, metric='precomputed').fit(distance_matrix)
+    clustering = DBSCAN(eps=0.997, min_samples=1, metric='precomputed').fit(distance_matrix)
     labels = clustering.labels_
     clusters = {}
     for i, label in enumerate(labels):
@@ -118,6 +118,11 @@ def localiser(esps, t1, t2):
             t1r, t2r, s = esp.read_window(t1, t2)
             # print("READING", t1r, t2r)
             if len(s) > 100:
+
+                # pre filter the sample
+                b, a = signal.butter(3, 800, fs=CONFIG.SAMPLE_RATE, btype='hp')
+                s = signal.lfilter(b, a, s)
+
                 f, t, Sxx = signal.spectrogram(s, CONFIG.SAMPLE_RATE, nperseg=100, nfft=200) # f, t, Sxx
                 positions[mac] = esp.position
                 samples[mac] = s
