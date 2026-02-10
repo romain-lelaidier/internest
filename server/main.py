@@ -42,6 +42,8 @@ def routine_info(esps):
     time.sleep(1)
 
 def handle_request(message):
+    global esps
+    
     mac = ':'.join(list(map(lambda c: add_padding_zeros(hex(c)[2:], 2), message[0 : CONFIG.ESP_ID_LENGTH])))
     code = message[CONFIG.ESP_ID_LENGTH]
 
@@ -66,7 +68,6 @@ def handle_request(message):
         esps[mac].receive_packet(esp_time, samples)
 
 def routine_audio_server(_):
-    global esps
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 10 * 1024 * 1024)

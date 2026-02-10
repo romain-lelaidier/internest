@@ -2,10 +2,16 @@ import numpy as np
 from scipy.io.wavfile import write
 from birdnetlib.analyzer import Analyzer
 from birdnetlib import RecordingBuffer
+import sys
+import os
 
 from config import CONFIG
 
 n_samples = 0
+
+class NullIO(StringIO):
+    def write(self, txt):
+       pass
 
 print("Chargement du modele BirdNET...")
 analyzer = Analyzer()
@@ -17,6 +23,7 @@ class Sample:
         self.origin = origin
         self.s = s
         self.n = n_samples
+        self.species = []
         n_samples += 1
 
     def save(self):
@@ -27,17 +34,24 @@ class Sample:
             analyzer, self.s, CONFIG.SAMPLE_RATE,
             min_conf=CONFIG.BIRDNET_MIN_CONFIDENCE_2
         )
-        # print(f"[L2] Analyse BirdNET pour {mac} ({len(samples)} samples, {CONFIG.BIRDNET_WINDOW_2_S}s)")
-        recording.analyze()
 
-        printer = f" ! DETECTION ! {self.n} ; origin = {self.origin})"
+        sys.stdout = NullIO()
+        recording.analyze()
+        sys.stdout = sys.__stdout__
 
         for det in recording.detections:
             species = det['common_name']
-            printer += f" ({species})"
+            confidence = det['confidence']
+            self.species.append((species, confidence))
 
+        self.log()
+
+    def log(self):
+        printer = f" ! DETECTION ! {self.n} ; origin = {self.origin})"
+        for species, confidence in self.species:
+            printer += f" ({species} {round(confidence*100)}%)"
         print(printer)
-        
+
         # is_new = species not in active_species
         # if is_new:
         #     print(f"[L2] >>> {species} sur {mac} (conf {det['confidence']:.2f})")
