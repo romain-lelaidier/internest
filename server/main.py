@@ -4,6 +4,7 @@ import socket
 import threading
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 
 scipy.fft.fft(np.zeros(256))
 
@@ -27,6 +28,8 @@ esps_positions = {
     "1c:db:d4:34:5c:04": [ 6, 5, 2.3 ],     # bleu
     "1c:db:d4:33:6a:78": [ 4, 3, 1 ],       # jaune sans buzzer
 }
+
+executor = ThreadPoolExecutor(max_workers=8)
 
 def routine_info(esps):
     printer = ""
@@ -62,6 +65,18 @@ def handle_request(message):
         samples = np.frombuffer(payload[CONFIG.ESP_TIME_LENGTH : ], dtype='<i2')
         esps[mac].receive_packet(esp_time, samples)
 
+def routine_audio_server(_):
+    global esps
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 10 * 1024 * 1024)
+    server_socket.bind(('', CONFIG.PORT_AUDIO))
+    while True:
+        message, address = server_socket.recvfrom(CONFIG.ESP_ID_LENGTH + 1 + CONFIG.ESP_TIME_LENGTH + CONFIG.PACKET_LENGTH)
+        if len(message) == CONFIG.ESP_ID_LENGTH + 1 + CONFIG.ESP_TIME_LENGTH + CONFIG.PACKET_LENGTH:
+            # décodage du paquet
+            executor.submit(handle_request, message)
+
 def handle_client(client_socket):
     global esps
     # printing what the client sends
@@ -70,17 +85,6 @@ def handle_client(client_socket):
         rtmsg = handle_request(request)
         if rtmsg:
             client_socket.send(rtmsg)
-
-def routine_audio_server(_):
-    global esps
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_socket.bind(('', CONFIG.PORT_AUDIO))
-    while True:
-        message, address = server_socket.recvfrom(CONFIG.ESP_ID_LENGTH + 1 + CONFIG.ESP_TIME_LENGTH + CONFIG.PACKET_LENGTH)
-        if len(message) == CONFIG.ESP_ID_LENGTH + 1 + CONFIG.ESP_TIME_LENGTH + CONFIG.PACKET_LENGTH:
-            # décodage du paquet
-            handle_request(message)
 
 def routine_sync_server(_):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
