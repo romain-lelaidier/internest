@@ -128,7 +128,7 @@ def localiser(esps, t1, t2):
                 samples[mac] = s
 
                 # threshold filtering
-                i = Sxx > Sxx.max() / 20                                # keeping only high-energy values
+                i = Sxx > Sxx.max() / 30                                # keeping only high-energy values
                 i = i & np.repeat([f > 800], len(t), axis=0).T          # keeping only frequencies above 800 Hz
                 # building boxes
                 ii = expand_and_filter_true_regions(i, min_size=20)     # aggregating those values and removing the only ones
@@ -140,7 +140,7 @@ def localiser(esps, t1, t2):
                     true_indices = np.where(iii)
                     x_min, x_max, y_min, y_max = np.min(true_indices[1]), np.max(true_indices[1]), np.min(true_indices[0]), np.max(true_indices[0])
                     t_min, t_max, f_min, f_max = t[x_min], t[x_max], f[y_min], f[y_max]
-                    boxes[mac].append((t_min, t_min + max(t_max - t_min, CONFIG.BIRD_SOUND_MIN_DURATION), f_min, f_max))
+                    boxes[mac].append((t_min, t_max + CONFIG.BIRD_SOUND_MIN_DURATION, f_min, f_max))
         except:
             continue
 
