@@ -3,10 +3,10 @@ import numpy as np
 from scipy import signal, ndimage
 from scipy.optimize import least_squares
 from sklearn.cluster import DBSCAN
-from scipy.io.wavfile import write
 
 from utils import micros
 from config import CONFIG
+from sample import Sample
 
 def expand_and_filter_true_regions(xy, min_size=3):
     # Dilatation
@@ -107,10 +107,7 @@ def multilateration_residual(source, mic_positions, distance_differences):
         residuals.append(d_i - d_j + diff)
     return np.array(residuals)
 
-nth = 0
-
 def localiser(esps, t1, t2):
-    global nth
     samples = {}
     boxes = {}
     positions = {}
@@ -176,20 +173,19 @@ def localiser(esps, t1, t2):
             args=(positions, distance_differences),
         )
         estimated_sound_origin = result.x
-        # print(f"saving {nth}")
-        write(f"./out/{nth}.wav", CONFIG.SAMPLE_RATE, np.int16(sie_max_si / np.max(np.abs(sie_max_si)) * 32767))
-        print(f" ! DETECTION ! {nth} (origin: {estimated_sound_origin})")
-        nth += 1
-        sound_guesses.append((estimated_sound_origin, box))
+        sound_guesses.append(Sample(estimated_sound_origin, sie_max_si))
 
-    # print("GUESSES:", sound_guesses)
+    return sound_guesses
 
-def routine_localiser(esps):
+def routine_postproc(esps):
     while True:
         t = micros()
         target_t2 = t - CONFIG.BUFFER_DELAY_US
         target_t1 = target_t2 - CONFIG.WINDOW_SIZE_VAD_US
         try:
-            localiser(esps, target_t1, target_t2)
+            samples = localiser(esps, target_t1, target_t2)
+            for sample in samples:
+                print(f" ! DETECTION ! {sample.n} (origin: {sample.origin})")
+
         finally:
             time.sleep(CONFIG.COMPUTE_INTERVAL_US / 1e6)
