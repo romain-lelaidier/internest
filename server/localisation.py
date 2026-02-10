@@ -188,7 +188,7 @@ class TDOAEngine:
         if self.use_multistart:
             init_points = [[5,5,5], [2,2,2], [8,8,8], [2,8,5], [8,2,5]]
         else:
-            init_points = [[5.0, 5.0, 5.0]]
+            init_points = [[2.5, 2.5, 1.0]]
 
         for combo in combos:
             for init_pos in init_points:
@@ -197,7 +197,7 @@ class TDOAEngine:
                         self._equations_tdoa,
                         init_pos,
                         args=(active_mics_pos, combo),
-                        bounds=([0, 0, 0], [15, 15, 15]), # Limites salle
+                        bounds=([0, 0, 0], [7, 7, 3]), # Limites salle
                         xtol=1e-3,
                         ftol=1e-3,
                         max_nfev=100
@@ -217,7 +217,7 @@ OUTPUT_CSV = "live_positions.csv"
 # Init CSV
 if not os.path.exists(OUTPUT_CSV):
     with open(OUTPUT_CSV, 'w', newline='') as f:
-        csv.writer(f).writerow(["RPI_Time_us", "X", "Y", "Z", "Cost"])
+        csv.writer(f).writerow(["RPI_Time_us", "X", "| Y", "Z", "Cost"])
 
 tdoa_engine = TDOAEngine()
 
@@ -280,7 +280,7 @@ def localiser(esps, t_start_vad, t_end_vad):
                 print("output: ", pos, cost)
 
                 if pos is not None:
-                    print(f"   🦜 Cri à T+{t_rel:.2f}s -> 📍 X={pos[0]:.1f} Y={pos[1]:.1f} Z={pos[2]:.1f}")
+                    print(f"   >>>  Cri à T+{t_rel:.2f}s >>> X={pos[0]:.1f} | Y={pos[1]:.1f} | Z={pos[2]:.1f}")
 
                     # Pour l'afficher en temps réel sur l'IHM.
                     notify_position(pos[0], pos[1], pos[2], cost, t_cri_us) # Ca va envoyer à l'IHM si il tourne les pos.

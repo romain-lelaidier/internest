@@ -2,4 +2,4 @@
 - Bleu : 34.5c.04
 - Vert : 34.79.6c
 - Rouge : 38.43.00
-- Jaune (sans buzzer) : 36.6f.5c
+- Jaune : 36.6f.5c
