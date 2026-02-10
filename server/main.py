@@ -33,7 +33,7 @@ def routine_info(esps):
     t = micros()
     for mac, esp in esps.items():
         t1r, t2r, s = esp.read_window(t - CONFIG.BIRDNET_WINDOW_S, t - CONFIG.BUFFER_DELAY_US)
-        p = (s != 0).sum() / ((t2r - t1r) * CONFIG.SAMPLE_RATE * 1e6)
+        p = (s != 0).sum() / ((t2r - t1r) * CONFIG.SAMPLE_RATE / 1e6) if len(s) > 0 else 0
         printer += f"{mac} = {round(p*100)}%  -  "
     print(printer)
     time.sleep(1)
