@@ -142,7 +142,7 @@ def localiser(esps, t1, t2):
     agg_boxes = aggregate_boxes(boxes)
     # keeping only boxes whose time length is superior to 0.3 s
     agg_boxes = list(filter(lambda box: box[1] - box[0] > 0.3, agg_boxes))
-    print("BOXES:", agg_boxes)
+    # print("BOXES:", agg_boxes)
 
     initial_guess = np.mean(list(positions.values()), axis=0)
 
@@ -173,12 +173,13 @@ def localiser(esps, t1, t2):
             args=(positions, distance_differences),
         )
         estimated_sound_origin = result.x
-        print(f"saving {nth}")
+        # print(f"saving {nth}")
         write(f"./out/{nth}.wav", CONFIG.SAMPLE_RATE, np.int16(sie_max_si / np.max(np.abs(sie_max_si)) * 32767))
+        print(f" ! DETECTION ! {nth} (origin: {estimated_sound_origin})")
         nth += 1
         sound_guesses.append((estimated_sound_origin, box))
 
-    print("GUESSES:", sound_guesses)
+    # print("GUESSES:", sound_guesses)
 
 def routine_localiser(esps):
     while True:
