@@ -3,6 +3,7 @@ import scipy.fft
 import socket
 import threading
 import time
+import traceback
 
 scipy.fft.fft(np.zeros(256))
 
@@ -110,8 +111,10 @@ def routine_wrapper(func):
     while True:
         try:
             func(esps)
-        except Exception as err:
-            print(err)
+        except Exception:
+            print("ERROR")
+            traceback.print_exc()
+            print("restarting thread...")
 
 if __name__ == "__main__":
 
@@ -124,6 +127,7 @@ if __name__ == "__main__":
         routine_audio_server,
         routine_sync_server,
         routine_localiser,
+        routine_info
         # routine_buzz_server,
         # run_step_by_step_calibration
     ]
