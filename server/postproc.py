@@ -134,7 +134,8 @@ def localiser(esps, t1, t2):
                     # retrieving box boundaries
                     true_indices = np.where(iii)
                     x_min, x_max, y_min, y_max = np.min(true_indices[1]), np.max(true_indices[1]), np.min(true_indices[0]), np.max(true_indices[0])
-                    boxes[mac].append((t[x_min], t[x_max], f[y_min], f[y_max]))
+                    t_min, t_max, f_min, f_max = t[x_min], t[x_max], f[y_min], f[y_max]
+                    boxes[mac].append((t_min, t_min + max(t_max - t_min, CONFIG.BIRD_SOUND_MIN_DURATION), f_min, f_max))
         except:
             continue
 

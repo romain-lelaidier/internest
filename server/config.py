@@ -12,6 +12,9 @@ class CONFIG:
     SAMPLE_RATE = 48000             # sample rate théorique des ESP
     MAX_WINDOW_S = 20               # durée maximale d'enregistrement (au-delà, on oublie les paquets)
 
+    # BIRDS
+    BIRD_SOUND_MIN_DURATION = 0.3   # durée minimale d'un son d'oiseau (pour aggrégation)
+
     # BIRDNET_LOOP (loop 1 : analyse continue, fenêtres courtes)
     BIRDNET_WINDOW_S = 5.0          # durée de la fenêtre d'analyse (secondes)
     BIRDNET_MIN_CONFIDENCE = 0.5    # seuil de confiance minimum

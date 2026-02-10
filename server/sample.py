@@ -3,7 +3,7 @@ from scipy.io.wavfile import write
 from birdnetlib.analyzer import Analyzer
 from birdnetlib import RecordingBuffer
 import sys
-import os
+from io import StringIO
 
 from config import CONFIG
 
