@@ -32,8 +32,9 @@ ESP_POSITIONS = {
     "esp1": np.array([0.0, 5.0, 0.0]),
     "esp2": np.array([7.0, 0.0, 0.0]),
     "esp3": np.array([6.0, 5.0, 2.3]),
-    "esp4": np.array([4.0, 3.0, 1.0]),
+    "esp4": np.array([0.0, 0.5, 2.3]),
 }
+
 
 ESP_LABELS = {
     "esp0": "ESP0 (vert)",
@@ -159,17 +160,17 @@ def run_simulation(pipeline="v2"):
             BIP_FREQ, BIP_DURATION, SNR_DB,
         )
         esps = {mac: MockESP(mac, pos, sigs[mac]) for mac, pos in ESP_POSITIONS.items()}
-        samples = localiser(esps, t1, t2)
+        has_activity, positions_3d = localiser(esps, t1, t2)
 
         trajectory_real.append(source_pos.copy())
 
-        if len(samples) == 0:
+        if not has_activity or len(positions_3d) == 0:
             trajectory_est.append(None)
             errors.append(None)
             print(f"  Pas {step:2d}  |  reel = {source_pos}  |  AUCUNE DETECTION")
             continue
 
-        estimated = samples[0].origin
+        estimated = positions_3d[0]
         err = np.linalg.norm(estimated - source_pos)
         trajectory_est.append(estimated.copy())
         errors.append(err)
