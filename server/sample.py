@@ -27,6 +27,7 @@ class Sample:
         n_samples += 1
 
     def save(self):
+        # Pour sauvegarder le sample pour debug
         write(f"./out/{self.n}.wav", CONFIG.SAMPLE_RATE, np.int16(self.s / np.max(np.abs(self.s)) * 32767))
 
     def analyze(self):
