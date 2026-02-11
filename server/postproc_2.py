@@ -320,6 +320,7 @@ def _run_birdnet(samples):
 
 
 def routine_postproc(esps):
+    print("[postproc2] routine lancee")
     # Cooldown : timestamp (us) jusqu'auquel on ignore les nouvelles detections
     cooldown_until = 0
 
@@ -330,9 +331,14 @@ def routine_postproc(esps):
         try:
             # Localisation sur fenetre courte (2s) pour la VAD + TDOA
             samples = localiser(esps, target_t1, target_t2)
+            n_esps = len(esps)
+            n_seg = len(samples)
+            in_cooldown = target_t2 <= cooldown_until
+            birdnet_busy = _birdnet_busy.locked()
 
-            if len(samples) > 0 and target_t2 > cooldown_until:
-                # Activite detectee et on n'est pas en cooldown
+            if n_seg > 0 and not in_cooldown:
+                print(f"[postproc2] ACTIVITE : {n_seg} segment(s) detecte(s), {n_esps} ESP(s)")
+
                 # → lire 20s pour BirdNET depuis le meilleur ESP
                 birdnet_t2 = target_t2
                 birdnet_t1 = birdnet_t2 - BIRDNET_WINDOW_US
@@ -340,7 +346,7 @@ def routine_postproc(esps):
                 for sample in samples:
                     best_signal = None
                     best_energy = 0
-                    for mac, esp in esps.items():
+                    for _, esp in esps.items():
                         try:
                             _, _, s = esp.read_window(birdnet_t1, birdnet_t2)
                             if len(s) > 0:
@@ -354,14 +360,24 @@ def routine_postproc(esps):
                     if best_signal is not None:
                         sample.s = best_signal.astype(np.float64)
 
+                dur_s = len(samples[0].s) / CONFIG.SAMPLE_RATE if len(samples[0].s) > 0 else 0
+                print(f"[postproc2] -> BirdNET : {n_seg} sample(s), duree signal = {dur_s:.1f}s")
+
                 # Lancer BirdNET dans un thread si pas deja occupe
                 if _birdnet_busy.acquire(blocking=False):
                     threading.Thread(
                         target=_run_birdnet, args=(samples,), daemon=True
                     ).start()
+                else:
+                    print("[postproc2] -> BirdNET occupe, skip")
 
                 # Cooldown : ne pas re-analyser pendant les 20 prochaines secondes
                 cooldown_until = target_t2 + BIRDNET_WINDOW_US
+            elif n_seg > 0 and in_cooldown:
+                cd_restant = (cooldown_until - target_t2) / 1e6
+                print(f"[postproc2] activite detectee mais cooldown ({cd_restant:.1f}s restantes)")
+            else:
+                print(f"[postproc2] pas d'activite ({n_esps} ESP(s))")
 
         finally:
             time.sleep(CONFIG.COMPUTE_INTERVAL_US / 1e6)
