@@ -11,8 +11,9 @@ scipy.fft.fft(np.zeros(256))
 from esp import ESP
 from utils import micros, add_padding_zeros
 # from postproc import routine_postproc
-from postproc_2 import routine_postproc # routine updatée.
+from postproc_2 import routine_postproc, set_esps as set_esps_postproc2
 from config import CONFIG
+from ihm_postproc2 import start_ihm_postproc2
 # from ihm_birdnet import start_ihm
 # from ihm_localisation import start_ihm_localisation, set_esps
 
@@ -112,6 +113,8 @@ def routine_wrapper(func):
 if __name__ == "__main__":
 
     # On lance les IHM qui lancent leurs propres threads daemon.
+    set_esps_postproc2(esps)
+    start_ihm_postproc2()
     # start_ihm()
     # set_esps(esps)
     # start_ihm_localisation()

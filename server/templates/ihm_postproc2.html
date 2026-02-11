@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>InterNest - PostProc2</title>
+    <script src="/static/plotly.min.js"
+            onerror="document.getElementById('chart').innerHTML='<p style=color:#f87171;padding:20px>plotly.min.js introuvable.</p>'; window._noPlotly=true;">
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', monospace;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 60% 40%;
+            height: 100vh;
+        }
+        /* --- Colonne gauche : 3D plot --- */
+        .left { position: relative; overflow: hidden; }
+        #chart { width: 100%; height: 100vh; }
+        #status {
+            position: absolute; top: 12px; left: 12px;
+            background: rgba(22,33,62,0.92); padding: 10px 14px;
+            border-radius: 8px; z-index: 100;
+        }
+        #status h2 { color: #00d4aa; font-size: 15px; margin-bottom: 6px; }
+        #status p { font-size: 12px; margin: 3px 0; }
+        .val { color: #00d4aa; }
+
+        /* --- Colonne droite : especes --- */
+        .right {
+            display: flex; flex-direction: column;
+            border-left: 1px solid #2a2a4a;
+            overflow: hidden;
+        }
+        .right h3 {
+            padding: 14px 16px 8px;
+            font-size: 14px;
+            color: #00d4aa;
+            border-bottom: 1px solid #2a2a4a;
+        }
+        /* Especes actives */
+        #active-species {
+            padding: 8px 16px;
+            min-height: 80px;
+        }
+        .sp-pill {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: rgba(0,212,170,0.12);
+            border: 1px solid #00d4aa44;
+            border-radius: 20px;
+            padding: 5px 12px;
+            margin: 3px 4px;
+            font-size: 13px;
+        }
+        .sp-dot {
+            width: 8px; height: 8px;
+            background: #00d4aa;
+            border-radius: 50%;
+        }
+        .sp-conf { color: #00d4aa; font-size: 11px; }
+        .sp-ago  { color: #888; font-size: 11px; }
+
+        /* Journal */
+        #journal {
+            flex: 1;
+            overflow-y: auto;
+            padding: 6px 16px;
+        }
+        .ev {
+            font-size: 12px;
+            padding: 3px 0;
+            border-bottom: 1px solid #1f1f3a;
+        }
+        .ev-time { color: #666; margin-right: 8px; }
+        .ev-arrivee { color: #00d4aa; }
+        .ev-depart  { color: #f87171; }
+        .ev-species { color: #ccc; }
+
+        .empty-msg { color: #555; font-size: 12px; padding: 8px 0; }
+
+        .journal-header-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 16px 8px;
+            border-top: 1px solid #2a2a4a;
+            border-bottom: 1px solid #2a2a4a;
+        }
+        .journal-header-row span { font-size: 14px; color: #f87171; font-weight: bold; }
+        .btn-export {
+            background: rgba(248,113,113,0.15);
+            border: 1px solid #f8717155;
+            color: #f87171;
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-export:hover { background: rgba(248,113,113,0.3); }
+
+        /* Barre BirdNET */
+        .birdnet-bar {
+            padding: 10px 16px 12px;
+            border-bottom: 1px solid #2a2a4a;
+        }
+        .birdnet-bar .bar-label {
+            font-size: 12px;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .birdnet-bar .bar-label .bl-title { color: #7b8cde; }
+        .birdnet-bar .bar-label .bl-status { font-size: 11px; }
+        .bar-track {
+            height: 6px;
+            background: #2a2a4a;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.4s ease;
+        }
+        .bar-fill.cooldown { background: #f59e0b; }
+        .bar-fill.analyzing {
+            background: linear-gradient(90deg, #7b8cde 25%, #00d4aa 50%, #7b8cde 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            width: 100% !important;
+        }
+        .bar-fill.idle { background: #00d4aa; }
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- Colonne gauche -->
+    <div class="left">
+        <div id="status">
+            <h2>InterNest - PostProc2</h2>
+            <p>Points : <span class="val" id="nb-points">0</span></p>
+            <p>ESPs : <span class="val" id="nb-esps">0</span></p>
+            <p>Derniere pos : <span class="val" id="last-pos">-</span></p>
+            <p style="color:#f87171;font-size:11px" id="debug-msg"></p>
+        </div>
+        <div id="chart"></div>
+    </div>
+
+    <!-- Colonne droite -->
+    <div class="right">
+        <div class="birdnet-bar">
+            <div class="bar-label">
+                <span class="bl-title">BirdNET</span>
+                <span class="bl-status" id="bn-status">idle</span>
+            </div>
+            <div class="bar-track">
+                <div class="bar-fill idle" id="bn-fill" style="width:0%"></div>
+            </div>
+        </div>
+        <h3>Especes actives</h3>
+        <div id="active-species">
+            <div class="empty-msg">Aucune detection</div>
+        </div>
+        <div class="journal-header-row">
+            <span>Journal</span>
+            <button class="btn-export" onclick="exportJournal()">Exporter CSV</button>
+        </div>
+        <div id="journal">
+            <div class="empty-msg">Aucun evenement</div>
+        </div>
+    </div>
+</div>
+
+<script>
+const dbg = document.getElementById('debug-msg');
+let lastEvents = [];
+let offset = 0;
+let nbMics = 0;
+let t0 = null;
+let plotlyOK = (typeof Plotly !== 'undefined');
+
+dbg.innerText = 'Plotly: ' + (plotlyOK ? 'OK' : 'ABSENT') + ' | chargement...';
+
+// --- Init Plotly (si disponible) ---
+if (plotlyOK) {
+    const tracePos = {
+        x: [], y: [], z: [],
+        mode: 'markers', type: 'scatter3d',
+        marker: {
+            color: [], size: 4, colorscale: 'Viridis', showscale: true,
+            colorbar: {
+                thickness: 8, len: 0.3, x: 0.95, y: 0.5,
+                title: { text: 'temps (s)', side: 'top', font: { size: 10, color: '#ccc' } },
+                tickfont: { size: 10, color: '#ccc' }
+            }
+        },
+        name: 'Positions'
+    };
+    const traceMics = {
+        x: [], y: [], z: [],
+        mode: 'markers+text', type: 'scatter3d',
+        marker: { color: '#f87171', size: 6, symbol: 'diamond' },
+        text: [], textposition: 'top center',
+        textfont: { size: 10, color: '#f87171' },
+        name: 'ESPs'
+    };
+    const layout = {
+        scene: {
+            xaxis: { range: [-2, 12], title: 'X (m)' },
+            yaxis: { range: [-2, 12], title: 'Y (m)' },
+            zaxis: { range: [-2, 8], title: 'Z (m)' },
+            camera: { eye: { x: 1.5, y: 1.5, z: 1.0 } }
+        },
+        margin: { l: 0, r: 0, b: 0, t: 0 },
+        paper_bgcolor: '#1a1a2e', plot_bgcolor: '#1a1a2e',
+        font: { color: '#ccc' }, showlegend: true,
+        legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(22,33,62,0.8)' }
+    };
+    Plotly.newPlot('chart', [tracePos, traceMics], layout, {responsive: true});
+}
+
+// --- Polling positions (+ micros sur le plot) ---
+function refreshPositions() {
+    fetch('/api/positions?offset=' + offset)
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(data => {
+            const nMics = Object.keys(data.mics).length;
+            dbg.innerText = 'API OK | mics=' + nMics + ' | pos=' + data.total
+                + ' | plotly=' + (plotlyOK ? 'oui' : 'non');
+
+            nbMics = nMics;
+            document.getElementById('nb-esps').innerText = nMics;
+
+            if (plotlyOK && nMics > 0) {
+                const macs = Object.keys(data.mics);
+                const labels = macs.map(m => m.slice(-5));
+                Plotly.restyle('chart', {
+                    x: [macs.map(m => data.mics[m][0])],
+                    y: [macs.map(m => data.mics[m][1])],
+                    z: [macs.map(m => data.mics[m][2])],
+                    text: [labels]
+                }, [1]);
+            }
+
+            const pts = data.positions;
+            if (pts.length === 0) return;
+
+            if (plotlyOK) {
+                if (t0 === null) t0 = pts[0].time;
+                Plotly.extendTraces('chart', {
+                    x: [pts.map(p => p.x)],
+                    y: [pts.map(p => p.y)],
+                    z: [pts.map(p => p.z)],
+                    'marker.color': [pts.map(p => p.time - t0)]
+                }, [0]);
+            }
+
+            offset = data.total;
+            const last = pts[pts.length - 1];
+            document.getElementById('nb-points').innerText = data.total;
+            document.getElementById('last-pos').innerText =
+                '[' + last.x.toFixed(2) + ', ' + last.y.toFixed(2) + ', ' + last.z.toFixed(2) + ']';
+        })
+        .catch(e => { dbg.innerText = 'ERR: ' + e.message; console.error(e); });
+}
+
+// --- Polling especes (independant de Plotly) ---
+function refreshSpecies() {
+    fetch('/api/species')
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(data => {
+            lastEvents = data.events;
+            const el = document.getElementById('active-species');
+            if (data.active.length === 0) {
+                el.innerHTML = '<div class="empty-msg">Aucune detection</div>';
+            } else {
+                el.innerHTML = data.active.map(s =>
+                    '<span class="sp-pill">' +
+                        '<span class="sp-dot"></span>' +
+                        '<span>' + s.species + '</span>' +
+                        '<span class="sp-conf">' + Math.round(s.confidence * 100) + '%</span>' +
+                        '<span class="sp-ago">il y a ' + s.ago + 's</span>' +
+                    '</span>'
+                ).join('');
+            }
+
+            const jel = document.getElementById('journal');
+            if (data.events.length === 0) {
+                jel.innerHTML = '<div class="empty-msg">Aucun evenement</div>';
+            } else {
+                const evts = data.events.slice().reverse();
+                jel.innerHTML = evts.map(e => {
+                    const d = new Date(e.time * 1000);
+                    const ts = d.toLocaleTimeString();
+                    const cls = e.type === 'arrivee' ? 'ev-arrivee' : 'ev-depart';
+                    const label = e.type === 'arrivee' ? '+ Arrivee' : '- Depart';
+                    return '<div class="ev">' +
+                        '<span class="ev-time">' + ts + '</span>' +
+                        '<span class="' + cls + '">' + label + '</span> ' +
+                        '<span class="ev-species">' + e.species + '</span>' +
+                    '</div>';
+                }).join('');
+            }
+        })
+        .catch(e => { console.error('species', e); });
+}
+
+// --- Export CSV ---
+function exportJournal() {
+    if (lastEvents.length === 0) { alert('Aucun evenement a exporter'); return; }
+    let csv = 'date,heure,type,espece\n';
+    lastEvents.forEach(e => {
+        const d = new Date(e.time * 1000);
+        const date = d.toLocaleDateString('fr-FR');
+        const heure = d.toLocaleTimeString('fr-FR');
+        csv += date + ',' + heure + ',' + e.type + ',' + e.species + '\n';
+    });
+    const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'internest_journal_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// --- Polling BirdNET status ---
+function refreshBirdnet() {
+    fetch('/api/birdnet_status')
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(data => {
+            const fill = document.getElementById('bn-fill');
+            const label = document.getElementById('bn-status');
+
+            fill.className = 'bar-fill ' + data.status;
+
+            if (data.status === 'cooldown') {
+                fill.style.width = Math.round(data.progress * 100) + '%';
+                label.innerText = 'cooldown ' + data.remaining + 's';
+                label.style.color = '#f59e0b';
+            } else if (data.status === 'analyzing') {
+                fill.style.width = '100%';
+                label.innerText = 'analyse en cours...';
+                label.style.color = '#7b8cde';
+            } else {
+                fill.style.width = '0%';
+                label.innerText = 'pret';
+                label.style.color = '#00d4aa';
+            }
+        })
+        .catch(() => {});
+}
+
+// --- Lancement ---
+refreshPositions();
+setInterval(refreshPositions, 1000);
+refreshSpecies();
+setInterval(refreshSpecies, 2000);
+refreshBirdnet();
+setInterval(refreshBirdnet, 500);
+</script>
+</body>
+</html>

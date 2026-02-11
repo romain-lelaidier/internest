@@ -23,6 +23,56 @@ from sample import Sample
 
 
 # ---------------------------------------------------------------------------
+#  Etat partage pour l'IHM (ihm_postproc2.py)
+# ---------------------------------------------------------------------------
+
+ihm_positions = []    # [{ x, y, z, time }]
+ihm_species   = {}    # { espece: { confidence, last_seen } }
+ihm_events    = []    # [{ time, type: "arrivee"|"depart", species }]
+ihm_esps      = {}    # reference vers le dict esps de main.py
+
+SPECIES_TIMEOUT = 30.0  # secondes avant qu'une espece soit consideree partie
+
+# Etat BirdNET pour l'IHM
+ihm_birdnet = {
+    'status': 'idle',        # 'idle' | 'cooldown' | 'analyzing'
+    'cooldown_end': 0.0,     # timestamp (s) fin de cooldown
+    'cooldown_total': 5.0,   # duree totale du cooldown (s)
+}
+
+
+def set_esps(esps):
+    """Enregistre la reference vers le dict esps pour l'IHM."""
+    global ihm_esps
+    ihm_esps = esps
+
+
+def _update_species(sample):
+    """Met a jour ihm_species et ihm_events apres une analyse BirdNET."""
+    now = time.time()
+
+    # Ajouter / mettre a jour les especes detectees
+    for species, confidence in sample.species:
+        is_new = species not in ihm_species
+        ihm_species[species] = {'confidence': confidence, 'last_seen': now}
+        if is_new:
+            ihm_events.append({
+                'time': now, 'type': 'arrivee', 'species': species
+            })
+
+    # Verifier les expirations
+    expired = [sp for sp, info in ihm_species.items()
+               if (now - info['last_seen']) > SPECIES_TIMEOUT]
+    for sp in expired:
+        ihm_events.append({'time': now, 'type': 'depart', 'species': sp})
+        del ihm_species[sp]
+
+    # Limiter la taille du journal
+    if len(ihm_events) > 500:
+        ihm_events[:] = ihm_events[-500:]
+
+
+# ---------------------------------------------------------------------------
 #  Constantes
 # ---------------------------------------------------------------------------
 
@@ -252,14 +302,17 @@ def process_localization(t_start, signals, macs, positions, fs):
 
 def localiser(esps, t1, t2):
     """
-    Pipeline complet de localisation sonore (v2).
+    Pipeline de detection + localisation sonore (v2).
 
     Parametres :
         esps : dict { mac: ESP } avec les buffers audio remplis
         t1   : timestamp debut de la fenetre (microsecondes)
         t2   : timestamp fin de la fenetre (microsecondes)
     Retourne :
-        liste de Sample (position 3D estimee + signal le plus energetique)
+        (has_activity, positions_3d)
+        has_activity  : bool, True si la VAD a detecte de l'activite
+        positions_3d  : liste de np.array([x, y, z]) pour chaque segment localise
+                        (vide si < 2 ESPs ou si localisation echouee)
     """
     signals = {}   # { mac: signal float64 }
     positions = {} # { mac: np.array([x, y, z]) }
@@ -267,15 +320,15 @@ def localiser(esps, t1, t2):
     # --- Etape 1 : lecture audio ---
     for mac, esp in esps.items():
         try:
-            t1r, t2r, s = esp.read_window(t1, t2)
+            _, _, s = esp.read_window(t1, t2)
             if len(s) > 100:
                 signals[mac] = s.astype(np.float64)
                 positions[mac] = esp.position
         except Exception:
             continue
 
-    if len(signals) < 2:
-        return []
+    if len(signals) == 0:
+        return False, []
 
     macs = list(signals.keys())
 
@@ -284,39 +337,42 @@ def localiser(esps, t1, t2):
     sum_signal = np.sum([np.abs(signals[m][:ref_len]) for m in macs], axis=0)
     t_detections = detect_segments(sum_signal, CONFIG.SAMPLE_RATE)
 
-    # --- Etape 3 : localisation pour chaque segment detecte ---
-    sound_guesses = []
-    for t_det in t_detections:
-        result = process_localization(t_det, signals, macs, positions,
-                                      CONFIG.SAMPLE_RATE)
-        if result is None:
-            continue
-        pos, cost = result
+    if len(t_detections) == 0:
+        return False, []
 
-        # Signal le plus energetique pour le Sample
-        best_mac = max(macs, key=lambda m: np.sum(signals[m] ** 2))
-        sound_guesses.append(Sample(pos, signals[best_mac]))
+    # --- Etape 3 : localisation TDOA (necessite >= 2 ESPs) ---
+    estimated_positions = []
+    if len(signals) >= 2:
+        for t_det in t_detections:
+            result = process_localization(t_det, signals, macs, positions,
+                                          CONFIG.SAMPLE_RATE)
+            if result is not None:
+                pos, cost = result
+                estimated_positions.append(pos)
 
-    return sound_guesses
+    return True, estimated_positions
 
 
 # ---------------------------------------------------------------------------
 #  Routine principale (tourne en thread) — meme interface que postproc
 # ---------------------------------------------------------------------------
 
-BIRDNET_WINDOW_US = CONFIG.MAX_WINDOW_S * 1e6  # 20s en microsecondes
+BIRDNET_WINDOW_US = 10.0 * 1e6   # 10s pour BirdNET
+BIRDNET_OVERLAP_US = 5.0 * 1e6   # overlap 5s → cooldown = 10 - 5 = 5s
 
 # Verrou pour eviter de lancer plusieurs analyses BirdNET en parallele
 _birdnet_busy = threading.Lock()
 
 
-def _run_birdnet(samples):
-    """Analyse BirdNET dans un thread separe."""
+def _run_birdnet(sample):
+    """Analyse BirdNET dans un thread separe (signal 20s, pas de position)."""
     try:
-        for sample in samples:
-            sample.analyze()
+        ihm_birdnet['status'] = 'analyzing'
+        sample.analyze()
+        _update_species(sample)
     finally:
         _birdnet_busy.release()
+        ihm_birdnet['status'] = 'idle'
 
 
 def routine_postproc(esps):
@@ -329,55 +385,67 @@ def routine_postproc(esps):
         target_t2 = t - CONFIG.BUFFER_DELAY_US
         target_t1 = target_t2 - CONFIG.WINDOW_SIZE_VAD_US
         try:
-            # Localisation sur fenetre courte (2s) pour la VAD + TDOA
-            samples = localiser(esps, target_t1, target_t2)
             n_esps = len(esps)
-            n_seg = len(samples)
+
+            # --- 1) Localisation (VAD + TDOA) sur fenetre courte (2s) ---
+            has_activity, positions_3d = localiser(esps, target_t1, target_t2)
+
+            if not has_activity:
+                print(f"[postproc2] pas d'activite ({n_esps} ESP(s))")
+            elif positions_3d:
+                now = time.time()
+                for pos in positions_3d:
+                    print(f"[postproc2] POSITION : [{pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f}]")
+                    ihm_positions.append({
+                        'x': float(pos[0]), 'y': float(pos[1]), 'z': float(pos[2]),
+                        'time': now
+                    })
+                if len(ihm_positions) > 2000:
+                    ihm_positions[:] = ihm_positions[-2000:]
+            else:
+                print(f"[postproc2] ACTIVITE detectee ({n_esps} ESP(s), pas assez pour localiser)")
+
+            # --- 2) BirdNET (decorrele de la localisation) ---
             in_cooldown = target_t2 <= cooldown_until
-            birdnet_busy = _birdnet_busy.locked()
-
-            if n_seg > 0 and not in_cooldown:
-                print(f"[postproc2] ACTIVITE : {n_seg} segment(s) detecte(s), {n_esps} ESP(s)")
-
-                # → lire 20s pour BirdNET depuis le meilleur ESP
+            if in_cooldown:
+                cd_restant = (cooldown_until - target_t2) / 1e6
+                ihm_birdnet['status'] = 'cooldown'
+                print(f"[postproc2] cooldown BirdNET ({cd_restant:.1f}s restantes)")
+            else:
+                # Lire 10s depuis le meilleur ESP pour BirdNET
                 birdnet_t2 = target_t2
                 birdnet_t1 = birdnet_t2 - BIRDNET_WINDOW_US
 
-                for sample in samples:
-                    best_signal = None
-                    best_energy = 0
-                    for _, esp in esps.items():
-                        try:
-                            _, _, s = esp.read_window(birdnet_t1, birdnet_t2)
-                            if len(s) > 0:
-                                energy = np.sum(s.astype(np.float64) ** 2)
-                                if energy > best_energy:
-                                    best_energy = energy
-                                    best_signal = s
-                        except Exception:
-                            continue
+                best_signal = None
+                best_energy = 0
+                for _, esp in esps.items():
+                    try:
+                        _, _, s = esp.read_window(birdnet_t1, birdnet_t2)
+                        if len(s) > 0:
+                            energy = np.sum(s.astype(np.float64) ** 2)
+                            if energy > best_energy:
+                                best_energy = energy
+                                best_signal = s
+                    except Exception:
+                        continue
 
-                    if best_signal is not None:
-                        sample.s = best_signal.astype(np.float64)
+                if best_signal is not None:
+                    dur_s = len(best_signal) / CONFIG.SAMPLE_RATE
+                    print(f"[postproc2] -> BirdNET : duree signal = {dur_s:.1f}s")
+                    sample = Sample(np.zeros(3), best_signal.astype(np.float64))
 
-                dur_s = len(samples[0].s) / CONFIG.SAMPLE_RATE if len(samples[0].s) > 0 else 0
-                print(f"[postproc2] -> BirdNET : {n_seg} sample(s), duree signal = {dur_s:.1f}s")
+                    if _birdnet_busy.acquire(blocking=False):
+                        threading.Thread(
+                            target=_run_birdnet, args=(sample,), daemon=True
+                        ).start()
+                    else:
+                        print("[postproc2] -> BirdNET occupe, skip")
 
-                # Lancer BirdNET dans un thread si pas deja occupe
-                if _birdnet_busy.acquire(blocking=False):
-                    threading.Thread(
-                        target=_run_birdnet, args=(samples,), daemon=True
-                    ).start()
-                else:
-                    print("[postproc2] -> BirdNET occupe, skip")
-
-                # Cooldown : ne pas re-analyser pendant les 20 prochaines secondes
-                cooldown_until = target_t2 + BIRDNET_WINDOW_US
-            elif n_seg > 0 and in_cooldown:
-                cd_restant = (cooldown_until - target_t2) / 1e6
-                print(f"[postproc2] activite detectee mais cooldown ({cd_restant:.1f}s restantes)")
-            else:
-                print(f"[postproc2] pas d'activite ({n_esps} ESP(s))")
+                # Cooldown = fenetre - overlap = 5s
+                cooldown_total_s = (BIRDNET_WINDOW_US - BIRDNET_OVERLAP_US) / 1e6
+                cooldown_until = target_t2 + (BIRDNET_WINDOW_US - BIRDNET_OVERLAP_US)
+                ihm_birdnet['cooldown_end'] = time.time() + cooldown_total_s
+                ihm_birdnet['cooldown_total'] = cooldown_total_s
 
         finally:
             time.sleep(CONFIG.COMPUTE_INTERVAL_US / 1e6)
