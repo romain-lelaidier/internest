@@ -74,7 +74,7 @@ def run_step_by_step_calibration(esps):
                 detection_time_abs = (t_start_us / 1e6) + (sample_idx / SAMPLE_RATE)
                 
                 all_tdoa[buzzer_mac][receiver_mac] = detection_time_abs
-        t_ref = min(all_tdoa[buzzer_mac])
+        t_ref = min(all_tdoa[buzzer_mac].values())
         for receiver_mac in macs_list:
             all_tdoa[buzzer_mac][receiver_mac] = all_tdoa[buzzer_mac][receiver_mac] - t_ref
 

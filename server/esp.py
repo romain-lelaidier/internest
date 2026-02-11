@@ -6,7 +6,7 @@ from config import CONFIG
 WINDOW_BUFFER_SIZE = CONFIG.MAX_WINDOW_S * CONFIG.SAMPLE_RATE
 
 class ESP:
-    def __init__(self, mac, id, position):
+    def __init__(self, mac, id = 0, position):
         self.mac = mac
         self.id = id
         self.position = np.array(position)

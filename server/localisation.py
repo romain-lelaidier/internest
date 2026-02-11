@@ -237,7 +237,8 @@ def localiser(esps, t_start_vad, t_end_vad):
             # Sécurité taille pour la somme numpy
             if len(sig) != ref_len:
                 sig = np.resize(sig, ref_len)
-
+            sos = signal.butter(4, 100, 'hp', fs=CONFIG.SAMPLE_RATE, output='sos')
+            sig = signal.sosfilt(sos, sig)
             vad_signals.append(sig)
             mic_ids_map.append(esp_obj.id)
 
@@ -248,7 +249,7 @@ def localiser(esps, t_start_vad, t_end_vad):
 
         # On détecte les segments dans ces 2 secondes
         # detect_bird_segments renvoie des temps RELATIFS (ex: 0.5s depuis le début de la fenêtre)
-        detections_relative = detect_bird_segments(sum_signal, sr=48000, n_sigma=3.0)
+        detections_relative = detect_bird_segments(sum_signal, sr=CONFIG.SAMPLE_RATE, n_sigma=3.0)
 
         print(f"🔎 Analyse VAD (2s): {len(detections_relative)} cris potentiels.")
 

@@ -322,6 +322,8 @@ def localiser(esps, t1, t2):
         try:
             _, _, s = esp.read_window(t1, t2)
             if len(s) > 100:
+                sos = signal.butter(4, 100, 'hp', fs=CONFIG.SAMPLE_RATE, output='sos')
+                sig = signal.sosfilt(sos, s)
                 signals[mac] = s.astype(np.float64)
                 positions[mac] = esp.position
         except Exception:
