@@ -36,9 +36,11 @@ executor = ThreadPoolExecutor(max_workers=8)
 def routine_info(esps):
     printer = ""
     t = micros()
+    t1 = t - CONFIG.BIRDNET_WINDOW_S * 1e6
+    t2 = t - CONFIG.BUFFER_DELAY_US
     for mac, esp in esps.items():
-        t1r, t2r, s = esp.read_window(t - CONFIG.BIRDNET_WINDOW_S * 1e6, t - CONFIG.BUFFER_DELAY_US)
-        p = (s != 0).sum() / ((t2r - t1r) * CONFIG.SAMPLE_RATE / 1e6) if len(s) > 0 else 0
+        _, _, s = esp.read_window(t1, t2)
+        p = (s != 0).sum() / ((t2 - t1) * CONFIG.SAMPLE_RATE / 1e6) if len(s) > 0 else 0
         printer += f"{mac} = {round(p*100)}%  -  "
     print(printer)
     time.sleep(1)
