@@ -197,6 +197,80 @@ def run_simulation(pipeline="v2"):
 
 
 # ---------------------------------------------------------------------------
+#  Simulation IHM (temps reel dans le navigateur)
+# ---------------------------------------------------------------------------
+
+FAKE_SPECIES = [
+    "Merle noir", "Mesange bleue", "Pinson des arbres",
+    "Rouge-gorge familier", "Fauvette a tete noire",
+]
+
+
+def run_simulation_ihm():
+    """Lance la simulation pas a pas, alimente l'IHM Flask en temps reel."""
+    import time as _time
+    from types import SimpleNamespace
+
+    _mock_sample_module()
+    from postproc_2 import localiser
+    import postproc_2 as pp2
+    from ihm_postproc2 import start_ihm_postproc2
+
+    # Enregistrer les ESPs dans l'IHM
+    fake_esps = {}
+    for mac, pos in ESP_POSITIONS.items():
+        fake_esps[mac] = SimpleNamespace(position=pos, mac=mac)
+    pp2.ihm_esps = fake_esps
+
+    # Lancer le serveur Flask
+    start_ihm_postproc2()
+    print()
+    print(f"  IHM ouverte sur http://localhost:8010")
+    print(f"  Simulation en cours... (1 pas / seconde)")
+    print()
+
+    # Trajectoire en boucle
+    n_steps = 20
+    center = np.array([3.5, 2.5, 1.0])
+    t1 = 1_000_000
+    t2 = t1 + int(WINDOW_US)
+    step = 0
+
+    while True:
+        # Trajectoire circulaire
+        angle = step * 0.3
+        radius = 2.0
+        source_pos = center + np.array([
+            radius * np.cos(angle),
+            radius * np.sin(angle),
+            0.3 * np.sin(angle * 0.5)
+        ])
+
+        sigs = generate_signals(
+            source_pos, ESP_POSITIONS, SAMPLE_RATE, WINDOW_S,
+            BIP_FREQ, BIP_DURATION, SNR_DB,
+        )
+        esps = {mac: MockESP(mac, pos, sigs[mac]) for mac, pos in ESP_POSITIONS.items()}
+        has_activity, positions_3d = localiser(esps, t1, t2)
+
+        now = _time.time()
+
+        if has_activity and positions_3d:
+            est = positions_3d[0]
+            err = np.linalg.norm(est - source_pos)
+            pp2.ihm_positions.append({
+                'x': float(est[0]), 'y': float(est[1]), 'z': float(est[2]),
+                'time': now
+            })
+            print(f"  Pas {step:3d} | estime [{est[0]:.2f}, {est[1]:.2f}, {est[2]:.2f}] | err {err:.3f}m")
+        else:
+            print(f"  Pas {step:3d} | pas de detection")
+
+        step += 1
+        _time.sleep(1.0)
+
+
+# ---------------------------------------------------------------------------
 #  GUI matplotlib
 # ---------------------------------------------------------------------------
 
@@ -317,6 +391,8 @@ if __name__ == "__main__":
                         help="v1 = postproc.py, v2 = postproc_2.py (defaut)")
     parser.add_argument("--no-gui", action="store_true",
                         help="Pas d'affichage graphique")
+    parser.add_argument("--ihm", action="store_true",
+                        help="Lance l'IHM web sur localhost:8010 avec simulation temps reel")
     args = parser.parse_args()
 
     print("=" * 70)
@@ -324,7 +400,9 @@ if __name__ == "__main__":
     print("=" * 70)
     print()
 
-    traj_real, traj_est, errs, lbl = run_simulation(pipeline=args.pipeline)
-
-    if not args.no_gui:
-        show_gui(traj_real, traj_est, errs, lbl)
+    if args.ihm:
+        run_simulation_ihm()
+    else:
+        traj_real, traj_est, errs, lbl = run_simulation(pipeline=args.pipeline)
+        if not args.no_gui:
+            show_gui(traj_real, traj_est, errs, lbl)

@@ -86,6 +86,18 @@ def api_birdnet_status():
     })
 
 
+@app.route('/api/clear', methods=['POST'])
+def api_clear():
+    target = flask_request.json.get('target', 'all') if flask_request.json else 'all'
+    if target in ('positions', 'all'):
+        pp2.ihm_positions.clear()
+    if target in ('journal', 'all'):
+        pp2.ihm_events.clear()
+        pp2.ihm_species.clear()
+    print(f"[IHM] clear: {target}")
+    return jsonify({'ok': True})
+
+
 def start_ihm_postproc2():
     """Lance le serveur Flask dans un thread daemon."""
     t = threading.Thread(

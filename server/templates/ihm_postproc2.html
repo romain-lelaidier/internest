@@ -101,6 +101,17 @@
             cursor: pointer;
         }
         .btn-export:hover { background: rgba(248,113,113,0.3); }
+        .btn-clear {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid #555;
+            color: #999;
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 6px;
+        }
+        .btn-clear:hover { background: rgba(255,255,255,0.15); color: #ccc; }
 
         /* Barre BirdNET */
         .birdnet-bar {
@@ -146,7 +157,7 @@
     <div class="left">
         <div id="status">
             <h2>InterNest - PostProc2</h2>
-            <p>Points : <span class="val" id="nb-points">0</span></p>
+            <p>Points : <span class="val" id="nb-points">0</span> <button class="btn-clear" onclick="clearData('positions')">Clear</button></p>
             <p>ESPs : <span class="val" id="nb-esps">0</span></p>
             <p>Derniere pos : <span class="val" id="last-pos">-</span></p>
             <p style="color:#f87171;font-size:11px" id="debug-msg"></p>
@@ -172,6 +183,7 @@
         <div class="journal-header-row">
             <span>Journal</span>
             <button class="btn-export" onclick="exportJournal()">Exporter CSV</button>
+            <button class="btn-clear" onclick="clearData('journal')">Clear</button>
         </div>
         <div id="journal">
             <div class="empty-msg">Aucun evenement</div>
@@ -330,6 +342,30 @@ function exportJournal() {
     a.download = 'internest_journal_' + new Date().toISOString().slice(0,10) + '.csv';
     a.click();
     URL.revokeObjectURL(url);
+}
+
+// --- Clear ---
+function clearData(target) {
+    fetch('/api/clear', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({target: target})
+    }).then(() => {
+        if (target === 'positions' || target === 'all') {
+            offset = 0;
+            t0 = null;
+            document.getElementById('nb-points').innerText = '0';
+            document.getElementById('last-pos').innerText = '-';
+            if (plotlyOK) {
+                Plotly.restyle('chart', {x: [[]], y: [[]], z: [[]], 'marker.color': [[]]}, [0]);
+            }
+        }
+        if (target === 'journal' || target === 'all') {
+            lastEvents = [];
+            document.getElementById('active-species').innerHTML = '<div class="empty-msg">Aucune detection</div>';
+            document.getElementById('journal').innerHTML = '<div class="empty-msg">Aucun evenement</div>';
+        }
+    });
 }
 
 // --- Polling BirdNET status ---
