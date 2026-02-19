@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>InterNest (Jumean Numérique)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', monospace;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 60% 40%;
+            height: 100vh;
+        }
+
+        /* --- Colonne gauche : 3D plot --- */
+        .left { position: relative; overflow: hidden; }
+        #chart { width: 100%; height: 100vh; }
+        #status {
+            position: absolute; top: 12px; left: 12px;
+            background: rgba(22,33,62,0.92); padding: 10px 14px;
+            border-radius: 8px; z-index: 100;
+        }
+        #status h2 { color: #00d4aa; font-size: 15px; margin-bottom: 6px; }
+        #status p { font-size: 12px; margin: 3px 0; }
+        .val { color: #00d4aa; }
+
+        /* --- Colonne droite : espèces --- */
+        .right {
+            display: flex; flex-direction: column;
+            border-left: 1px solid #2a2a4a;
+            overflow: hidden;
+        }
+        .right h3 {
+            padding: 14px 16px 8px;
+            font-size: 14px;
+            color: #00d4aa;
+            border-bottom: 1px solid #2a2a4a;
+        }
+
+        /* Espèces actives */
+        #active-species {
+            padding: 8px 16px;
+            min-height: 80px;
+        }
+        .sp-pill {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: rgba(0,212,170,0.12);
+            border: 1px solid #00d4aa44;
+            border-radius: 20px;
+            padding: 5px 12px;
+            margin: 3px 4px;
+            font-size: 13px;
+        }
+        .sp-dot {
+            width: 8px; height: 8px;
+            background: #00d4aa;
+            border-radius: 50%;
+        }
+        .sp-conf { color: #00d4aa; font-size: 11px; }
+        .sp-ago  { color: #888; font-size: 11px; }
+
+        /* Journal */
+        #journal {
+            flex: 1;
+            overflow-y: auto;
+            padding: 6px 16px;
+        }
+        .ev {
+            font-size: 12px;
+            padding: 3px 0;
+            border-bottom: 1px solid #1f1f3a;
+        }
+        .ev-time { color: #666; margin-right: 8px; }
+        .ev-arrivee { color: #00d4aa; }
+        .ev-depart  { color: #f87171; }
+        .ev-species { color: #ccc; }
+
+        .empty-msg { color: #555; font-size: 12px; padding: 8px 0; }
+
+        .journal-header-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 16px 8px;
+            border-top: 1px solid #2a2a4a;
+            border-bottom: 1px solid #2a2a4a;
+        }
+        .journal-header-row span { font-size: 14px; color: #f87171; font-weight: bold; }
+        .btn-export {
+            background: rgba(248,113,113,0.15);
+            border: 1px solid #f8717155;
+            color: #f87171;
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-export:hover { background: rgba(248,113,113,0.3); }
+
+        /* Barre BirdNET */
+        .birdnet-bar {
+            padding: 10px 16px 12px;
+            border-bottom: 1px solid #2a2a4a;
+        }
+        .birdnet-bar .bar-label {
+            font-size: 12px;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .birdnet-bar .bar-label .bl-title { color: #7b8cde; }
+        .birdnet-bar .bar-label .bl-status { font-size: 11px; }
+        .bar-track {
+            height: 6px;
+            background: #2a2a4a;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.4s ease;
+        }
+        .bar-fill.cooldown { background: #f59e0b; }
+        .bar-fill.analyzing {
+            background: linear-gradient(90deg, #7b8cde 25%, #00d4aa 50%, #7b8cde 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            width: 100% !important;
+        }
+        .bar-fill.idle { background: #00d4aa; }
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- Colonne gauche -->
+    <div class="left">
+        <div id="status">
+            <h2>InterNest (Jumeau Numérique)</h2>
+            <p>Connexion : <span class="val" id="connection">...</span></p>
+            <p>Points : <span class="val" id="nb-points">0</span> <button class="btn-export" onclick="exportPositions()">Exporter CSV</button></p>
+            <p>Dernière position : <span class="val" id="last-pos">-</span></p>
+        </div>
+        <div id="chart"></div>
+    </div>
+
+    <!-- Colonne droite -->
+    <div class="right">
+        <div class="birdnet-bar">
+            <div class="bar-label">
+                <span class="bl-title">BirdNET</span>
+                <span class="bl-status" id="bn-status">idle</span>
+            </div>
+            <div class="bar-track">
+                <div class="bar-fill idle" id="bn-fill" style="width:0%"></div>
+            </div>
+        </div>
+        <h3>Especes actives</h3>
+        <div id="active-species">
+            <div class="empty-msg">Aucune détection</div>
+        </div>
+        <div class="journal-header-row">
+            <span>Journal</span>
+            <button class="btn-export" onclick="exportJournal()">Exporter CSV</button>
+        </div>
+        <div id="journal">
+            <div class="empty-msg">Aucun évènement</div>
+        </div>
+    </div>
+</div>
+
+<script>
+// --- CONFIG ---
+const MICROS = [
+    {x:0, y:0, z:0}, {x:10, y:0, z:0}, {x:0, y:10, z:0},
+    {x:0, y:0, z:10}, {x:10, y:10, z:10}
+];
+
+let nbPoints = 0;
+let lastEvents = [];
+let allPositions = [];
+
+// --- Init Plotly ---
+const traceMicros = {
+    x: MICROS.map(m => m.x),
+    y: MICROS.map(m => m.y),
+    z: MICROS.map(m => m.z),
+    mode: 'markers+text',
+    type: 'scatter3d',
+    marker: { color: '#f87171', size: 4, symbol: 'diamond' },
+    text: ['M0','M1','M2','M3','M4'],
+    textposition: 'top center',
+    textfont: { size: 10, color: '#f87171' },
+    name: 'Micros'
+};
+
+const traceBird = {
+    x: [], y: [], z: [],
+    mode: 'markers',
+    type: 'scatter3d',
+    marker: {
+        color: [], size: 5,
+        colorscale: 'Viridis', showscale: true,
+        colorbar: {
+            thickness: 8, len: 0.3, x: 0.95, y: 0.5,
+            title: { text: 't (s)', side: 'top', font: { size: 10, color: '#ccc' } },
+            tickfont: { size: 10, color: '#ccc' }
+        }
+    },
+    name: 'Positions'
+};
+
+const layout = {
+    scene: {
+        xaxis: { range: [-2, 12], title: 'X (m)' },
+        yaxis: { range: [-2, 12], title: 'Y (m)' },
+        zaxis: { range: [-2, 12], title: 'Z (m)' },
+        camera: { eye: { x: 1.5, y: 1.5, z: 1.0 } }
+    },
+    margin: { l: 0, r: 0, b: 0, t: 0 },
+    paper_bgcolor: '#1a1a2e', plot_bgcolor: '#1a1a2e',
+    font: { color: '#ccc' }, showlegend: true,
+    legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(22,33,62,0.8)' }
+};
+
+Plotly.newPlot('chart', [traceMicros, traceBird], layout, {responsive: true});
+
+// --- Vérité terrain ---
+fetch('/ground_truth')
+    .then(res => res.json())
+    .then(data => {
+        const colors = [
+            'rgba(0,255,0,0.25)', 'rgba(0,200,255,0.25)', 'rgba(255,200,0,0.25)',
+            'rgba(255,100,255,0.25)', 'rgba(255,150,100,0.25)', 'rgba(100,255,200,0.25)'
+        ];
+        const truthTraces = [];
+        Object.keys(data).forEach((key, i) => {
+            truthTraces.push({
+                x: data[key].x, y: data[key].y, z: data[key].z,
+                mode: 'lines', type: 'scatter3d',
+                line: { color: colors[i % colors.length], width: 2, dash: 'dash' },
+                name: 'Verite ' + key
+            });
+        });
+        Plotly.addTraces('chart', truthTraces);
+    })
+    .catch(() => {});
+
+// --- Socket.IO (positions) ---
+const socket = io();
+
+socket.on('connect', () => {
+    document.getElementById('connection').innerText = 'Connecte';
+    document.getElementById('connection').style.color = '#00d4aa';
+});
+socket.on('disconnect', () => {
+    document.getElementById('connection').innerText = 'Deconnecte';
+    document.getElementById('connection').style.color = '#f87171';
+});
+
+socket.on('new_position', (data) => {
+    nbPoints++;
+    allPositions.push(data);
+    document.getElementById('nb-points').innerText = nbPoints;
+    document.getElementById('last-pos').innerText =
+        '[' + data.x.toFixed(2) + ', ' + data.y.toFixed(2) + ', ' + data.z.toFixed(2) + ']';
+
+    Plotly.extendTraces('chart', {
+        x: [[data.x]],
+        y: [[data.y]],
+        z: [[data.z]],
+        'marker.color': [[data.t]]
+    }, [1]);
+});
+
+// --- Polling espèces + BirdNET status ---
+function refreshSpecies() {
+    fetch('/api/species')
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(data => {
+            lastEvents = data.events || [];
+
+            // Espèces actives
+            const el = document.getElementById('active-species');
+            if (!data.active || data.active.length === 0) {
+                el.innerHTML = '<div class="empty-msg">Aucune detection</div>';
+            } else {
+                el.innerHTML = data.active.map(s =>
+                    '<span class="sp-pill">' +
+                        '<span class="sp-dot"></span>' +
+                        '<span>' + s.species + '</span>' +
+                        '<span class="sp-conf">' + Math.round(s.confidence * 100) + '%</span>' +
+                        '<span class="sp-ago">il y a ' + s.ago + 's</span>' +
+                    '</span>'
+                ).join('');
+            }
+
+            // Journal
+            const jel = document.getElementById('journal');
+            if (!data.events || data.events.length === 0) {
+                jel.innerHTML = '<div class="empty-msg">Aucun evenement</div>';
+            } else {
+                const evts = data.events.slice().reverse();
+                jel.innerHTML = evts.map(e => {
+                    const d = new Date(e.time * 1000);
+                    const ts = d.toLocaleTimeString();
+                    const cls = e.type === 'arrivee' ? 'ev-arrivee' : 'ev-depart';
+                    const label = e.type === 'arrivee' ? '+ Arrivee' : '- Depart';
+                    return '<div class="ev">' +
+                        '<span class="ev-time">' + ts + '</span>' +
+                        '<span class="' + cls + '">' + label + '</span> ' +
+                        '<span class="ev-species">' + e.species + '</span>' +
+                    '</div>';
+                }).join('');
+            }
+
+            // BirdNET status
+            const bn = data.birdnet || {};
+            const fill = document.getElementById('bn-fill');
+            const label = document.getElementById('bn-status');
+            fill.className = 'bar-fill ' + (bn.status || 'idle');
+
+            if (bn.status === 'cooldown') {
+                fill.style.width = Math.round((bn.progress || 0) * 100) + '%';
+                label.innerText = 'cooldown ' + (bn.remaining || 0) + 's';
+                label.style.color = '#f59e0b';
+            } else if (bn.status === 'analyzing') {
+                fill.style.width = '100%';
+                label.innerText = 'analyse en cours...';
+                label.style.color = '#7b8cde';
+            } else {
+                fill.style.width = '0%';
+                label.innerText = 'pret';
+                label.style.color = '#00d4aa';
+            }
+        })
+        .catch(() => {});
+}
+
+// --- Export CSV positions ---
+function exportPositions() {
+    if (allPositions.length === 0) { alert('Aucune position'); return; }
+    let csv = 'batch_id,temps_s,x,y,z,cost,bird_id\n';
+    allPositions.forEach(p => {
+        csv += p.id + ',' + p.t.toFixed(3) + ',' +
+               p.x.toFixed(2) + ',' + p.y.toFixed(2) + ',' + p.z.toFixed(2) + ',' +
+               p.cost.toFixed(2) + ',' + p.bird_id + '\n';
+    });
+    const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'internest_positions_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+}
+
+// --- Export CSV journal ---
+function exportJournal() {
+    if (lastEvents.length === 0) { alert('Aucun evenement'); return; }
+    let csv = 'date,heure,type,espece\n';
+    lastEvents.forEach(e => {
+        const d = new Date(e.time * 1000);
+        csv += d.toLocaleDateString('fr-FR') + ',' +
+               d.toLocaleTimeString('fr-FR') + ',' +
+               e.type + ',' + e.species + '\n';
+    });
+    const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'internest_journal_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+}
+
+// --- Lancement polling ---
+refreshSpecies();
+setInterval(refreshSpecies, 1500);
+</script>
+</body>
+</html>
