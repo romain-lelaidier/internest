@@ -1,0 +1,9 @@
+numpy
+scipy
+librosa
+soundfile
+pydub
+flask
+flask-socketio
+watchdog
+birdnetlib

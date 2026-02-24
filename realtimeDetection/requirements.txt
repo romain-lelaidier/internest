@@ -1,0 +1,19 @@
+# BirdNET Integration
+birdnetlib>=0.18.0
+
+# Audio Processing
+librosa>=0.10.0
+scipy>=1.7.0
+numpy>=1.20.0
+soundfile>=0.12.0
+
+# CLI Interface
+rich>=13.0.0
+typer>=0.9.0
+
+# Utilities
+python-dateutil>=2.8.0
+watchdog==2.1.9
+
+# Web Dashboard
+flask>=3.0.0

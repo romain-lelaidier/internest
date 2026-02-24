@@ -1,0 +1,127 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.manifold import MDS
+from mpl_toolkits.mplot3d import Axes3D
+
+# --- 1. CONFIGURATION ---
+VITESSE_SON = 343.0
+N_MICROS = 5
+
+# POSITIONS RÉELLES (Pour la simulation seulement)
+POSITIONS_REELLES = np.array([
+    [0, 0, 0],        # Mic 0
+    [100, 0, 0],    # Mic 1
+    [0, 100, 0],  # Mic 2
+    [0, 0, 100], # Mic 3
+    [100, 100, 100]   # Mic 4
+])
+
+# Erreurs simulées
+ERREUR_MESURE = 0.0002 # secondes
+
+# --- 2. SIMULATION MDS (Création du nuage brut) ---
+# Génération de la matrice de distances (comme si mesurée par les buzzers)
+dist_matrix = np.zeros((N_MICROS, N_MICROS))
+for i in range(N_MICROS):
+    for j in range(N_MICROS):
+        d = np.linalg.norm(POSITIONS_REELLES[i] - POSITIONS_REELLES[j])
+        noise = np.random.normal(0, ERREUR_MESURE) * VITESSE_SON
+        dist_matrix[i, j] = max(0, d + noise)
+dist_matrix = (dist_matrix + dist_matrix.T) / 2
+
+# MDS
+mds = MDS(n_components=3, metric=True, dissimilarity='precomputed', random_state=42)
+positions_mds = mds.fit_transform(dist_matrix)
+
+print("Position MDS brute du Mic 0 (Aléatoire) :", np.round(positions_mds[0], 2))
+
+
+# --- 3. ALGORITHME D'ALIGNEMENT (LA SOLUTION) ---
+def align_to_mic0(points):
+    """
+    Transforme le nuage de points pour que :
+    - Mic 0 soit à [0, 0, 0]
+    - Mic 1 soit sur l'axe X positif
+    - Mic 2 soit sur le plan Z=0 (XY)
+    """
+    # A. TRANSLATION (Mic 0 -> Origine)
+    # On soustrait la position du Mic 0 à tous les points
+    t = points[0]
+    points_centered = points - t
+    
+    # B. ROTATION 1 (Mic 1 -> Axe X)
+    # Vecteur vers Mic 1
+    p1 = points_centered[1]
+    # Axe X désiré : (1, 0, 0)
+    # On construit une base orthonormée locale (Gram-Schmidt)
+    
+    # Nouvel axe X (u) = vecteur normalisé vers Mic 1
+    u = p1 / np.linalg.norm(p1)
+    
+    # Vecteur temporaire vers Mic 2
+    p2 = points_centered[2]
+    
+    # Nouvel axe Z (w) = produit vectoriel (u, p2) -> Perpendiculaire au plan (0, 1, 2)
+    w = np.cross(u, p2)
+    w = w / np.linalg.norm(w)
+    
+    # Nouvel axe Y (v) = produit vectoriel (w, u) -> Pour finir le repère ortho
+    v = np.cross(w, u)
+    
+    # Matrice de Rotation (Base de passage)
+    # R = [u, v, w] transposé
+    R = np.array([u, v, w])
+    
+    # Application de la rotation
+    # On utilise la transposée ou le produit scalaire pour projeter
+    points_aligned = np.dot(points_centered, R.T)
+    
+    # C. CORRECTION MIROIR (OPTIONNEL)
+    # Le MDS ne sait pas si Z est en haut ou en bas.
+    # Si on sait que Mic 4 est en hauteur (Z positif), on force le signe.
+    if points_aligned[4][2] < 0:
+        points_aligned[:, 2] *= -1
+        
+    return points_aligned
+
+# Exécution de l'alignement
+positions_finales = align_to_mic0(positions_mds)
+
+print("\n--- RÉSULTAT APRÈS ALIGNEMENT ---")
+print(f"Mic 0 : {np.round(positions_finales[0], 3)}  <-- ORIGINE PARFAITE")
+print(f"Mic 1 : {np.round(positions_finales[1], 3)}  <-- SUR AXE X")
+print(f"Mic 2 : {np.round(positions_finales[2], 3)}  <-- SUR PLAN XY")
+print(f"Mic 4 : {np.round(positions_finales[4], 3)}  <-- HAUTEUR")
+
+# --- 4. VISUALISATION ---
+fig = plt.figure(figsize=(10, 8))
+ax = fig.add_subplot(111, projection='3d')
+
+# Tracer les micros
+for i, pos in enumerate(positions_finales):
+    ax.scatter(pos[0], pos[1], pos[2], s=100, label=f'Mic {i}')
+    ax.text(pos[0], pos[1], pos[2]+0.1, f"M{i}\n{pos}", fontsize=8)
+
+# Tracer les axes du repère (0,0,0)
+ax.plot([0, 1], [0, 0], [0, 0], 'r-', linewidth=2, label='Axe X')
+ax.plot([0, 0], [0, 1], [0, 0], 'g-', linewidth=2, label='Axe Y')
+ax.plot([0, 0], [0, 0], [0, 1], 'b-', linewidth=2, label='Axe Z')
+
+ax.set_title("Géométrie Reconstruite (Mic 0 centré)")
+ax.set_xlabel('X')
+ax.set_ylabel('Y')
+ax.set_zlabel('Z')
+ax.legend()
+
+# Forcer un ratio égal pour ne pas déformer la vue
+max_range = np.array([positions_finales[:,0].max()-positions_finales[:,0].min(), 
+                      positions_finales[:,1].max()-positions_finales[:,1].min(), 
+                      positions_finales[:,2].max()-positions_finales[:,2].min()]).max() / 2.0
+mid_x = (positions_finales[:,0].max()+positions_finales[:,0].min()) * 0.5
+mid_y = (positions_finales[:,1].max()+positions_finales[:,1].min()) * 0.5
+mid_z = (positions_finales[:,2].max()+positions_finales[:,2].min()) * 0.5
+ax.set_xlim(mid_x - max_range, mid_x + max_range)
+ax.set_ylim(mid_y - max_range, mid_y + max_range)
+ax.set_zlim(mid_z - max_range, mid_z + max_range)
+
+plt.show()
