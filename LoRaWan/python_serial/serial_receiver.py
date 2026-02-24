@@ -1,3 +1,10 @@
+"""
+Run `continuous_listening(format="csv")` to listen to the data from the Serial port (select the right port !) and
+save it to a csv file.
+
+Run analyse_data(save_path, data=data_type) to visualise the data using matplotlib (subsequent visualisation, not real time)
+"""
+
 import serial.tools.list_ports
 import serial
 import matplotlib.pyplot as plt
